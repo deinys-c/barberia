@@ -25,7 +25,7 @@ SIMULAR_FALLO_NOTIFICACION = os.environ.get('SIMULAR_FALLO', 'False').lower() ==
 TIEMPO_ESPERA_FALLO_MIN = int(os.environ.get('TIEMPO_ESPERA', '20'))  # minutos
 
 # NÚMERO DE PRUEBA PARA VENEZUELA (cámbialo por el tuyo)
-NUMERO_PRUEBA_VENEZUELA = "+584241234567"  # Formato Venezuela
+NUMERO_PRUEBA_VENEZUELA = "+584142636234"  # Formato Venezuela
 
 # Inicializar base de datos al arrancar
 init_db()
