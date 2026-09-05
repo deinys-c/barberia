@@ -3,7 +3,7 @@ import json
 import logging
 import threading
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, time, timedelta
 from flask import Flask, request, jsonify, session
 from flask_cors import CORS
 from database import get_db, init_db
@@ -36,15 +36,22 @@ def es_dia_habil(fecha_str):
     fecha = datetime.strptime(fecha_str, '%Y-%m-%d')
     return fecha.weekday() < 6  # 0=lunes, 5=sábado, 6=domingo
 
-def calcular_huecos_libres(fecha, barbero_id=1):
-    """Devuelve lista de horas libres para un barbero en una fecha."""
+def calcular_huecos_libres(fecha_str, barbero_id=1):
+    """Devuelve lista de horas libres para un barbero en una fecha (formato HH:MM)."""
     conn = get_db()
     cursor = conn.cursor()
 
-    if not es_dia_habil(fecha):
+    # Verificar día hábil
+    try:
+        fecha = datetime.strptime(fecha_str, '%Y-%m-%d').date()
+    except ValueError:
+        conn.close()
+        return []
+    if fecha.weekday() == 6:  # domingo
         conn.close()
         return []
 
+    # Obtener horario del barbero
     barbero = cursor.execute(
         'SELECT hora_inicio, hora_fin FROM barberos WHERE id = ?',
         (barbero_id,)
@@ -53,34 +60,38 @@ def calcular_huecos_libres(fecha, barbero_id=1):
         conn.close()
         return []
 
-    inicio = int(barbero['hora_inicio'].split(':')[0])
-    fin = int(barbero['hora_fin'].split(':')[0])
+    # Convertir horario a objetos time
+    inicio = datetime.strptime(barbero['hora_inicio'], '%H:%M').time()
+    fin = datetime.strptime(barbero['hora_fin'], '%H:%M').time()
 
+    # Verificar bloqueos
     bloqueo = cursor.execute('''
         SELECT 1 FROM bloqueos 
         WHERE barbero_id = ? AND activo = 1 
         AND fecha_inicio <= ? AND fecha_fin >= ?
-    ''', (barbero_id, fecha, fecha)).fetchone()
+    ''', (barbero_id, fecha_str, fecha_str)).fetchone()
     if bloqueo:
         conn.close()
         return []
 
+    # Obtener citas ocupadas
     citas = cursor.execute('''
-        SELECT hora_inicio, hora_fin FROM citas 
+        SELECT hora_inicio FROM citas 
         WHERE barbero_id = ? AND fecha = ? 
         AND estado IN ('confirmada', 'pendiente_confirmacion')
-    ''', (barbero_id, fecha)).fetchall()
+    ''', (barbero_id, fecha_str)).fetchall()
+    ocupados = {c['hora_inicio'] for c in citas}
 
-    ocupados = [c['hora_inicio'] for c in citas]
-
+    # Generar franjas de 30 minutos usando datetime
     disponibles = []
-    hora = float(inicio)  # Aseguramos que sea float desde el principio
-    while hora < fin:
-        # Convertir a entero antes de formatear
-        hora_str = f"{int(hora):02d}:00"
+    hora_actual = datetime.combine(fecha, inicio)
+    hora_fin = datetime.combine(fecha, fin)
+
+    while hora_actual < hora_fin:
+        hora_str = hora_actual.strftime('%H:%M')
         if hora_str not in ocupados:
             disponibles.append(hora_str)
-        hora += 0.5
+        hora_actual += timedelta(minutes=30)
 
     conn.close()
     return disponibles
