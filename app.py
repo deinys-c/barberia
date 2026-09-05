@@ -41,12 +41,10 @@ def calcular_huecos_libres(fecha, barbero_id=1):
     conn = get_db()
     cursor = conn.cursor()
 
-    # 1. Verificar si es día hábil
     if not es_dia_habil(fecha):
         conn.close()
         return []
 
-    # 2. Obtener horario del barbero
     barbero = cursor.execute(
         'SELECT hora_inicio, hora_fin FROM barberos WHERE id = ?',
         (barbero_id,)
@@ -58,7 +56,6 @@ def calcular_huecos_libres(fecha, barbero_id=1):
     inicio = int(barbero['hora_inicio'].split(':')[0])
     fin = int(barbero['hora_fin'].split(':')[0])
 
-    # 3. Verificar bloqueos para ese día
     bloqueo = cursor.execute('''
         SELECT 1 FROM bloqueos 
         WHERE barbero_id = ? AND activo = 1 
@@ -68,7 +65,6 @@ def calcular_huecos_libres(fecha, barbero_id=1):
         conn.close()
         return []
 
-    # 4. Obtener citas confirmadas o pendientes para esa fecha
     citas = cursor.execute('''
         SELECT hora_inicio, hora_fin FROM citas 
         WHERE barbero_id = ? AND fecha = ? 
@@ -77,11 +73,11 @@ def calcular_huecos_libres(fecha, barbero_id=1):
 
     ocupados = [c['hora_inicio'] for c in citas]
 
-    # 5. Generar franjas de 30 minutos (desde hora_inicio hasta hora_fin)
     disponibles = []
-    hora = inicio
+    hora = float(inicio)  # Aseguramos que sea float desde el principio
     while hora < fin:
-        hora_str = f"{hora:02d}:00"
+        # Convertir a entero antes de formatear
+        hora_str = f"{int(hora):02d}:00"
         if hora_str not in ocupados:
             disponibles.append(hora_str)
         hora += 0.5
