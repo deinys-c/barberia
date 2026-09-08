@@ -88,6 +88,12 @@
         @media (max-width: 992px) { .header h1 { font-size: 1.8rem; } .productos-grid { grid-template-columns: repeat(3, 1fr); } .estilos-grid { grid-template-columns: repeat(3, 1fr); } }
         @media (max-width: 768px) { .header { flex-direction: column; text-align: center; } .header h1 { font-size: 1.6rem; } .header-actions { width: 100%; justify-content: center; } .tabs button { padding: 10px 16px; font-size: 0.85rem; } .panel { padding: 20px 15px; } .row { flex-direction: column; } .cita-item { flex-direction: column; align-items: stretch; } .cita-item .acciones { justify-content: center; } .productos-grid { grid-template-columns: repeat(2, 1fr); } .estilos-grid { grid-template-columns: repeat(2, 1fr); } }
         @media (max-width: 480px) { .header h1 { font-size: 1.3rem; } .header .slogan { font-size: 0.7rem; } .tabs button { padding: 8px 12px; font-size: 0.75rem; } .productos-grid { grid-template-columns: 1fr; } .estilos-grid { grid-template-columns: 1fr 1fr; } .huecos-grid button { padding: 6px 12px; font-size: 0.8rem; min-width: 60px; } }
+        .producto-card img {
+    background: #2c1a12;
+}
+.estilo-card img {
+    background: #2c1a12;
+}
     </style>
 </head>
 <body>
@@ -234,34 +240,34 @@
     ];
 
     function cargarProductos() {
-        const contenedor = document.getElementById('productosContainer');
-        contenedor.innerHTML = '';
-        productos.forEach(p => {
-            const card = document.createElement('div');
-            card.className = 'producto-card';
-            card.innerHTML = `
-                <img src="${p.imagen}" alt="${p.nombre}" onerror="this.src='https://via.placeholder.com/200x150/2c1a12/c9a84c?text=${encodeURIComponent(p.nombre)}'">
-                <div class="nombre">${p.nombre}</div>
-                <div class="descripcion">${p.descripcion}</div>
-                <div class="precio">${p.precio}</div>
-            `;
-            contenedor.appendChild(card);
-        });
-    }
+    const contenedor = document.getElementById('productosContainer');
+    contenedor.innerHTML = '';
+    productos.forEach(p => {
+        const card = document.createElement('div');
+        card.className = 'producto-card';
+        card.innerHTML = `
+            <img src="${p.imagen}" alt="${p.nombre}" onerror="this.src='https://picsum.photos/seed/${encodeURIComponent(p.nombre)}/200/150'">
+            <div class="nombre">${p.nombre}</div>
+            <div class="descripcion">${p.descripcion}</div>
+            <div class="precio">${p.precio}</div>
+        `;
+        contenedor.appendChild(card);
+    });
+}
 
-    function cargarEstilos() {
-        const contenedor = document.getElementById('estilosContainer');
-        contenedor.innerHTML = '';
-        estilos.forEach(e => {
-            const card = document.createElement('div');
-            card.className = 'estilo-card';
-            card.innerHTML = `
-                <img src="${e.imagen}" alt="${e.nombre}" onerror="this.src='https://via.placeholder.com/150x150/2c1a12/c9a84c?text=${encodeURIComponent(e.nombre)}'">
-                <div class="nombre">${e.nombre}</div>
-            `;
-            contenedor.appendChild(card);
-        });
-    }
+function cargarEstilos() {
+    const contenedor = document.getElementById('estilosContainer');
+    contenedor.innerHTML = '';
+    estilos.forEach(e => {
+        const card = document.createElement('div');
+        card.className = 'estilo-card';
+        card.innerHTML = `
+            <img src="${e.imagen}" alt="${e.nombre}" onerror="this.src='https://picsum.photos/seed/${encodeURIComponent(e.nombre)}/150/150'">
+            <div class="nombre">${e.nombre}</div>
+        `;
+        contenedor.appendChild(card);
+    });
+}
 
     // ===== FUNCIONES DE AUTENTICACION =====
     function getAuthHeaders() {

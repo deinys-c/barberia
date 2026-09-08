@@ -142,9 +142,8 @@ def reservar():
         h, m = map(int, hora_inicio.split(':'))
         total_min = h * 60 + m + duracion
         hora_fin = f"{total_min // 60:02d}:{total_min % 60:02d}"
-        alerta_cierre = 1 if total_min > 17 * 60 else 0  # 17:00 = 1020 min
+        alerta_cierre = 1 if total_min > 17 * 60 else 0
 
-        # Calcular antelación
         ahora = datetime.now()
         fecha_hora_cita = datetime.strptime(f"{fecha} {hora_inicio}", "%Y-%m-%d %H:%M")
         diff_min = (fecha_hora_cita - ahora).total_seconds() / 60
@@ -167,11 +166,12 @@ def reservar():
         if cliente:
             cliente_id = cliente['id']
         else:
+            # Insertar cliente con RETURNING id (PostgreSQL)
             cursor.execute(
-                'INSERT INTO clientes (nombre, telefono, notas_habituales) VALUES (%s, %s, %s)',
+                'INSERT INTO clientes (nombre, telefono, notas_habituales) VALUES (%s, %s, %s) RETURNING id',
                 (nombre, telefono, notas)
             )
-            cliente_id = cursor.lastrowid
+            cliente_id = cursor.fetchone()['id']
 
         # Insertar cita
         cursor.execute('''
@@ -185,7 +185,6 @@ def reservar():
         conn.commit()
         conn.close()
 
-        # Simular notificación (solo log)
         if tipo_reserva == 'urgente':
             logging.info(f"CITA {cita_id} - Reserva urgente: {nombre} - {fecha} {hora_inicio}")
             return jsonify({
