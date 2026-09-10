@@ -8,6 +8,7 @@ DATABASE_URL = os.getenv('DATABASE_URL')
 USING_POSTGRES = DATABASE_URL is not None and DATABASE_URL.startswith('postgres')
 
 def get_db():
+    """Devuelve una conexión a la base de datos (PostgreSQL en producción, SQLite local)."""
     if USING_POSTGRES:
         conn = psycopg2.connect(DATABASE_URL)
         conn.cursor_factory = psycopg2.extras.RealDictCursor
@@ -19,12 +20,13 @@ def get_db():
         return conn
 
 def init_db():
+    """Crea las tablas y los índices si no existen, e inserta datos de prueba."""
     conn = get_db()
     cursor = conn.cursor()
     is_postgres = USING_POSTGRES
     id_def = "SERIAL PRIMARY KEY" if is_postgres else "INTEGER PRIMARY KEY AUTOINCREMENT"
 
-    # Tablas
+    # ===== TABLA BARBEROS =====
     cursor.execute(f'''
         CREATE TABLE IF NOT EXISTS barberos (
             id {id_def},
@@ -37,6 +39,8 @@ def init_db():
             activo INTEGER DEFAULT 1
         )
     ''')
+
+    # ===== TABLA SERVICIOS =====
     cursor.execute(f'''
         CREATE TABLE IF NOT EXISTS servicios (
             id {id_def},
@@ -47,6 +51,8 @@ def init_db():
             activo INTEGER DEFAULT 1
         )
     ''')
+
+    # ===== TABLA CLIENTES =====
     cursor.execute(f'''
         CREATE TABLE IF NOT EXISTS clientes (
             id {id_def},
@@ -56,6 +62,8 @@ def init_db():
             notas_habituales TEXT
         )
     ''')
+
+    # ===== TABLA CITAS =====
     cursor.execute(f'''
         CREATE TABLE IF NOT EXISTS citas (
             id {id_def},
@@ -76,6 +84,15 @@ def init_db():
             FOREIGN KEY (servicio_id) REFERENCES servicios(id)
         )
     ''')
+
+    # ===== ÍNDICES PARA RENDIMIENTO =====
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_citas_fecha ON citas(fecha)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_citas_estado ON citas(estado)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_citas_barbero ON citas(barbero_id)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_citas_cliente ON citas(cliente_id)')
+    # ====================================
+
+    # ===== TABLA BLOQUEOS =====
     cursor.execute(f'''
         CREATE TABLE IF NOT EXISTS bloqueos (
             id {id_def},
@@ -87,6 +104,8 @@ def init_db():
             FOREIGN KEY (barbero_id) REFERENCES barberos(id)
         )
     ''')
+
+    # ===== TABLA LOGS NOTIFICACIONES =====
     cursor.execute(f'''
         CREATE TABLE IF NOT EXISTS logs_notificaciones (
             id {id_def},
@@ -99,7 +118,7 @@ def init_db():
         )
     ''')
 
-    # Datos de prueba
+    # ===== DATOS DE PRUEBA (SI NO EXISTEN) =====
     if is_postgres:
         cursor.execute("SELECT 1 FROM barberos LIMIT 1")
         existe = cursor.fetchone()

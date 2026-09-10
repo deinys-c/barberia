@@ -89,11 +89,13 @@
         @media (max-width: 768px) { .header { flex-direction: column; text-align: center; } .header h1 { font-size: 1.6rem; } .header-actions { width: 100%; justify-content: center; } .tabs button { padding: 10px 16px; font-size: 0.85rem; } .panel { padding: 20px 15px; } .row { flex-direction: column; } .cita-item { flex-direction: column; align-items: stretch; } .cita-item .acciones { justify-content: center; } .productos-grid { grid-template-columns: repeat(2, 1fr); } .estilos-grid { grid-template-columns: repeat(2, 1fr); } }
         @media (max-width: 480px) { .header h1 { font-size: 1.3rem; } .header .slogan { font-size: 0.7rem; } .tabs button { padding: 8px 12px; font-size: 0.75rem; } .productos-grid { grid-template-columns: 1fr; } .estilos-grid { grid-template-columns: 1fr 1fr; } .huecos-grid button { padding: 6px 12px; font-size: 0.8rem; min-width: 60px; } }
         .producto-card img {
-    background: #2c1a12;
-}
-.estilo-card img {
-    background: #2c1a12;
-}
+        background: #2c1a12;
+        }
+        .estilo-card img {
+        background: #2c1a12;
+        }
+        .estado-realizada { background: rgba(107, 114, 128, 0.3); color: #9ca3af; }
+        .estado-expirada { background: rgba(139, 42, 42, 0.3); color: #d97a7a; }
     </style>
 </head>
 <body>
@@ -612,43 +614,54 @@ function cargarEstilos() {
     };
 
     window.cargarHistorial = async function() {
-        try {
-            const res = await fetch(`${API_URL}/api/panel/historial`, { headers: getAuthHeaders() });
-            if (res.status === 401) {
-                alert('Sesion expirada. Vuelve a iniciar sesion.');
-                cerrarSesion();
-                document.getElementById('barberoLogin').style.display = 'block';
-                document.getElementById('barberoContenido').style.display = 'none';
-                return;
-            }
-            const citas = await res.json();
-            const cont = document.getElementById('historialLista');
-            cont.innerHTML = '';
-            if (!citas.length) { cont.innerHTML = '<div class="sin-huecos">No hay citas registradas.</div>'; return; }
-            citas.forEach(c => {
-                const div = document.createElement('div');
-                div.className = 'cita-item';
-                const estadoClase = c.estado === 'confirmada' ? 'estado-confirmada' : 'estado-pendiente';
-                const estadoTexto = c.estado === 'confirmada' ? 'Confirmada' : c.estado;
-                let botonCancelar = '';
-                if (c.estado === 'confirmada') {
-                    botonCancelar = `<button class="btn-danger" onclick="cancelarCitaConfirmada(${c.id})">Cancelar</button>`;
-                }
-                div.innerHTML = `
-                    <div class="info">
-                        <div class="fecha-hora">${c.fecha} - ${c.hora_inicio}</div>
-                        <div class="servicio">${c.servicio} - ${c.cliente}</div>
-                    </div>
-                    <div><span class="estado ${estadoClase}">${estadoTexto}</span></div>
-                    <div class="acciones">${botonCancelar}</div>
-                `;
-                cont.appendChild(div);
-            });
-        } catch (error) {
-            console.error('Error cargando historial:', error);
-            document.getElementById('historialLista').innerHTML = '<div class="sin-huecos">Error al cargar historial.</div>';
+    try {
+        const res = await fetch(`${API_URL}/api/panel/historial`, { headers: getAuthHeaders() });
+        if (res.status === 401) {
+            alert('Sesion expirada. Vuelve a iniciar sesion.');
+            cerrarSesion();
+            document.getElementById('barberoLogin').style.display = 'block';
+            document.getElementById('barberoContenido').style.display = 'none';
+            return;
         }
-    };
+        const citas = await res.json();
+        const cont = document.getElementById('historialLista');
+        cont.innerHTML = '';
+        if (!citas.length) { cont.innerHTML = '<div class="sin-huecos">No hay citas registradas.</div>'; return; }
+        citas.forEach(c => {
+            const div = document.createElement('div');
+            div.className = 'cita-item';
+            
+            // Mapear estados a clases y textos
+            const estados = {
+                'confirmada': { clase: 'estado-confirmada', texto: 'Confirmada' },
+                'pendiente_confirmacion': { clase: 'estado-pendiente', texto: 'Pendiente' },
+                'realizada': { clase: 'estado-realizada', texto: 'Realizada' },
+                'expirada': { clase: 'estado-expirada', texto: 'Expirada' },
+                'cancelada_por_cliente': { clase: 'estado-expirada', texto: 'Cancelada (Cliente)' },
+                'cancelada_por_barbero': { clase: 'estado-expirada', texto: 'Cancelada (Barbero)' },
+                'cancelada_por_sistema': { clase: 'estado-expirada', texto: 'Cancelada (Sistema)' }
+            };
+            const estado = estados[c.estado] || { clase: 'estado-pendiente', texto: c.estado };
+            
+            let botonCancelar = '';
+            if (c.estado === 'confirmada') {
+                botonCancelar = `<button class="btn-danger" onclick="cancelarCitaConfirmada(${c.id})">Cancelar</button>`;
+            }
+            div.innerHTML = `
+                <div class="info">
+                    <div class="fecha-hora">${c.fecha} - ${c.hora_inicio}</div>
+                    <div class="servicio">${c.servicio} - ${c.cliente}</div>
+                </div>
+                <div><span class="estado ${estado.clase}">${estado.texto}</span></div>
+                <div class="acciones">${botonCancelar}</div>
+            `;
+            cont.appendChild(div);
+        });
+    } catch (error) {
+        console.error('Error cargando historial:', error);
+        document.getElementById('historialLista').innerHTML = '<div class="sin-huecos">Error al cargar historial.</div>';
+    }
+};
 
     window.cancelarCitaConfirmada = async function(citaId) {
         if (!confirm('¿Cancelar esta cita confirmada?')) return;

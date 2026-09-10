@@ -87,6 +87,35 @@ def verificar_barbero():
     password = request.headers.get('X-Password')
     return password == BARBERO_PASSWORD
 
+def actualizar_citas_pasadas():
+    """
+    Actualiza el estado de las citas que ya pasaron:
+    - Confirmadas → realizadas
+    - Pendientes → expiradas
+    Se ejecuta al inicio de las consultas para mantener los estados actualizados.
+    """
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        hoy = datetime.now().strftime('%Y-%m-%d')
+        
+        # Citas confirmadas que ya pasaron → realizadas
+        cursor.execute('''
+            UPDATE citas SET estado = 'realizada' 
+            WHERE fecha < %s AND estado = 'confirmada'
+        ''', (hoy,))
+        
+        # Citas pendientes que ya pasaron → expiradas
+        cursor.execute('''
+            UPDATE citas SET estado = 'expirada' 
+            WHERE fecha < %s AND estado = 'pendiente_confirmacion'
+        ''', (hoy,))
+        
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        logging.error(f"Error actualizando citas pasadas: {e}")
+
 # ========== ENDPOINTS ==========
 
 @app.route('/')
@@ -224,8 +253,12 @@ def listar_pendientes():
     if not verificar_barbero():
         return jsonify({'error': 'No autorizado'}), 401
     try:
+        # Actualizar estados antes de consultar
+        actualizar_citas_pasadas()
+        
         conn = get_db()
         cursor = conn.cursor()
+        hoy = datetime.now().strftime('%Y-%m-%d')
         cursor.execute('''
             SELECT c.id, c.fecha, c.hora_inicio, c.hora_fin, c.estado, c.tipo_reserva,
                    cl.nombre as cliente, cl.telefono, s.nombre as servicio,
@@ -234,8 +267,9 @@ def listar_pendientes():
             JOIN clientes cl ON c.cliente_id = cl.id
             JOIN servicios s ON c.servicio_id = s.id
             WHERE c.estado = 'pendiente_confirmacion'
+            AND c.fecha >= %s
             ORDER BY c.fecha, c.hora_inicio
-        ''')
+        ''', (hoy,))
         citas = cursor.fetchall()
         conn.close()
         return jsonify([dict(c) for c in citas])
@@ -248,6 +282,9 @@ def historial_citas():
     if not verificar_barbero():
         return jsonify({'error': 'No autorizado'}), 401
     try:
+        # Actualizar estados antes de consultar
+        actualizar_citas_pasadas()
+        
         conn = get_db()
         cursor = conn.cursor()
         cursor.execute('''
@@ -257,7 +294,7 @@ def historial_citas():
             JOIN clientes cl ON c.cliente_id = cl.id
             JOIN servicios s ON c.servicio_id = s.id
             ORDER BY c.fecha DESC, c.hora_inicio DESC
-            LIMIT 50
+            LIMIT 100
         ''')
         citas = cursor.fetchall()
         conn.close()
@@ -393,7 +430,7 @@ def cancelar_cita_confirmada():
     try:
         conn = get_db()
         cursor = conn.cursor()
-        cursor.execute('SELECT estado FROM citas WHERE id = %s', (cita_id,))
+        cursor.execute('SELECT estado, fecha FROM citas WHERE id = %s', (cita_id,))
         cita = cursor.fetchone()
         if not cita:
             conn.close()
@@ -401,10 +438,16 @@ def cancelar_cita_confirmada():
         if cita['estado'] != 'confirmada':
             conn.close()
             return jsonify({'error': 'Solo se pueden cancelar citas confirmadas'}), 400
+        
+        # Solo permitir cancelar citas futuras
+        if cita['fecha'] < datetime.now().strftime('%Y-%m-%d'):
+            conn.close()
+            return jsonify({'error': 'No se pueden cancelar citas pasadas'}), 400
+        
         cursor.execute('UPDATE citas SET estado = %s WHERE id = %s', ('cancelada_por_barbero', cita_id))
         conn.commit()
         conn.close()
-        return jsonify({'mensaje': 'Cita cancelada exitosamente. El cliente será notificado.'})
+        return jsonify({'mensaje': 'Cita cancelada exitosamente.'})
     except Exception as e:
         logging.error(f"Error cancelando cita confirmada: {e}")
         return jsonify({'error': str(e)}), 500
@@ -417,17 +460,23 @@ def mis_citas():
     if not telefono:
         return jsonify({'error': 'Falta teléfono'}), 400
     try:
+        # Actualizar estados antes de consultar
+        actualizar_citas_pasadas()
+        
         conn = get_db()
         cursor = conn.cursor()
+        hoy = datetime.now().strftime('%Y-%m-%d')
         cursor.execute('''
             SELECT c.id, c.fecha, c.hora_inicio, c.hora_fin, c.estado, s.nombre as servicio,
                    c.alerta_cierre
             FROM citas c
             JOIN clientes cl ON c.cliente_id = cl.id
             JOIN servicios s ON c.servicio_id = s.id
-            WHERE cl.telefono = %s AND c.estado IN ('confirmada', 'pendiente_confirmacion')
+            WHERE cl.telefono = %s 
+            AND c.fecha >= %s
+            AND c.estado IN ('confirmada', 'pendiente_confirmacion')
             ORDER BY c.fecha, c.hora_inicio
-        ''', (telefono,))
+        ''', (telefono, hoy))
         citas = cursor.fetchall()
         conn.close()
         return jsonify([dict(c) for c in citas])
@@ -444,7 +493,7 @@ def cancelar_cita_cliente():
     try:
         conn = get_db()
         cursor = conn.cursor()
-        cursor.execute('SELECT estado FROM citas WHERE id = %s', (cita_id,))
+        cursor.execute('SELECT estado, fecha FROM citas WHERE id = %s', (cita_id,))
         cita = cursor.fetchone()
         if not cita:
             conn.close()
@@ -452,6 +501,12 @@ def cancelar_cita_cliente():
         if cita['estado'] not in ('confirmada', 'pendiente_confirmacion'):
             conn.close()
             return jsonify({'error': 'No se puede cancelar esta cita'}), 400
+        
+        # Solo permitir cancelar citas futuras
+        if cita['fecha'] < datetime.now().strftime('%Y-%m-%d'):
+            conn.close()
+            return jsonify({'error': 'No se pueden cancelar citas pasadas'}), 400
+        
         cursor.execute('UPDATE citas SET estado = %s WHERE id = %s', ('cancelada_por_cliente', cita_id))
         conn.commit()
         conn.close()
