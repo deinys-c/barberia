@@ -1119,5 +1119,60 @@ def reset_db():
         logging.error(f"Error reset: {e}")
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/admin/force-reset', methods=['GET'])
+def force_reset():
+    """⚠️ TEMPORAL: Fuerza reset completo de la BD."""
+    token = request.args.get('token', '')
+    if token != 'reset2026':
+        return jsonify({'error': 'Token inválido'}), 403
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        
+        # Borrar todo en orden por FK
+        for tabla in ['logs_notificaciones', 'citas', 'bloqueos', 'usuarios', 'clientes', 'catalogo', 'servicios', 'barberos']:
+            cursor.execute(f'DELETE FROM {tabla}')
+        conn.commit()
+        
+        # Reiniciar secuencias (PostgreSQL)
+        try:
+            for tabla in ['logs_notificaciones', 'citas', 'bloqueos', 'usuarios', 'clientes', 'catalogo', 'servicios', 'barberos']:
+                try:
+                    cursor.execute(f"ALTER SEQUENCE {tabla}_id_seq RESTART WITH 1")
+                except Exception:
+                    pass
+            conn.commit()
+        except Exception as seq_error:
+            logging.warning(f"No se pudieron reiniciar secuencias: {seq_error}")
+        
+        conn.close()
+        
+        # Recrear datos por defecto
+        init_db()
+        
+        # Verificar que se insertaron
+        conn2 = get_db()
+        cur2 = conn2.cursor()
+        cur2.execute('SELECT COUNT(*) as cnt FROM catalogo')
+        total_catalogo = cur2.fetchone()['cnt']
+        cur2.execute('SELECT COUNT(*) as cnt FROM barberos')
+        total_barberos = cur2.fetchone()['cnt']
+        cur2.execute('SELECT COUNT(*) as cnt FROM usuarios')
+        total_usuarios = cur2.fetchone()['cnt']
+        cur2.execute('SELECT COUNT(*) as cnt FROM servicios')
+        total_servicios = cur2.fetchone()['cnt']
+        conn2.close()
+        
+        return jsonify({
+            'mensaje': '✅ Reset forzado completado',
+            'catalogo': total_catalogo,
+            'barberos': total_barberos,
+            'usuarios': total_usuarios,
+            'servicios': total_servicios
+        })
+    except Exception as e:
+        logging.error(f"Error force reset: {e}")
+        return jsonify({'error': str(e)}), 500
+
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
