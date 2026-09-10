@@ -56,6 +56,7 @@ def calcular_huecos_libres(fecha_str, barbero_id=0):
     Genera horas disponibles.
     - barbero_id > 0: solo ese barbero.
     - barbero_id = 0: cualquier barbero activo.
+    Considera bloqueos.
     """
     conn = get_db()
     cursor = conn.cursor()
@@ -82,7 +83,22 @@ def calcular_huecos_libres(fecha_str, barbero_id=0):
             hora_actual += timedelta(minutes=30)
 
     if barbero_id > 0:
-                # Verificar bloqueos
+        # Barbero específico
+        cursor.execute('SELECT dias_trabajo FROM barberos WHERE id = %s AND activo = 1', (barbero_id,))
+        barbero = cursor.fetchone()
+        if not barbero:
+            conn.close()
+            return []
+        
+        try:
+            dias = json.loads(barbero['dias_trabajo'])
+        except (json.JSONDecodeError, TypeError):
+            dias = DIAS_ES[:6]
+        if DIAS_ES[dia_semana] not in dias:
+            conn.close()
+            return []
+        
+        # Verificar bloqueos
         cursor.execute('''
             SELECT 1 FROM bloqueos 
             WHERE barbero_id = %s AND activo = 1 
@@ -91,18 +107,7 @@ def calcular_huecos_libres(fecha_str, barbero_id=0):
         if cursor.fetchone():
             conn.close()
             return []
-        cursor.execute('SELECT dias_trabajo FROM barberos WHERE id = %s AND activo = 1', (barbero_id,))
-        barbero = cursor.fetchone()
-        if not barbero:
-            conn.close()
-            return []
-        try:
-            dias = json.loads(barbero['dias_trabajo'])
-        except (json.JSONDecodeError, TypeError):
-            dias = DIAS_ES[:6]
-        if DIAS_ES[dia_semana] not in dias:
-            conn.close()
-            return []
+        
         cursor.execute('''
             SELECT hora_inicio FROM citas 
             WHERE barbero_id = %s AND fecha = %s 
@@ -110,12 +115,14 @@ def calcular_huecos_libres(fecha_str, barbero_id=0):
         ''', (barbero_id, fecha_str))
         ocupados = {row['hora_inicio'] for row in cursor.fetchall()}
         disponibles = [h for h in todas_las_horas if h not in ocupados]
-        else:
+    else:
+        # Cualquier barbero disponible
         cursor.execute('SELECT id, dias_trabajo FROM barberos WHERE activo = 1')
         barberos = cursor.fetchall()
         if not barberos:
             conn.close()
             return []
+        
         dia_actual = DIAS_ES[dia_semana]
         barberos_hoy = []
         for b in barberos:
@@ -125,6 +132,7 @@ def calcular_huecos_libres(fecha_str, barbero_id=0):
                 dias = DIAS_ES[:6]
             if dia_actual not in dias:
                 continue
+            
             # Verificar si el barbero está bloqueado ese día
             cursor.execute('''
                 SELECT 1 FROM bloqueos 
@@ -132,11 +140,14 @@ def calcular_huecos_libres(fecha_str, barbero_id=0):
                 AND fecha_inicio <= %s AND fecha_fin >= %s
             ''', (b['id'], fecha_str, fecha_str))
             if cursor.fetchone():
-                continue  # Barbero bloqueado, saltar
+                continue
+            
             barberos_hoy.append(b['id'])
+        
         if not barberos_hoy:
             conn.close()
             return []
+        
         disponibles = []
         for hora in todas_las_horas:
             for bid in barberos_hoy:
@@ -148,6 +159,7 @@ def calcular_huecos_libres(fecha_str, barbero_id=0):
                 if not cursor.fetchone():
                     disponibles.append(hora)
                     break
+    
     conn.close()
     return sorted(set(disponibles))
 
@@ -159,7 +171,6 @@ def home():
 
 @app.route('/api/barberos', methods=['GET'])
 def listar_barberos_publico():
-    """Lista barberos activos (para el selector de reserva)."""
     try:
         conn = get_db()
         cursor = conn.cursor()
@@ -242,6 +253,14 @@ def reservar():
                     dias = DIAS_ES[:6]
                 if dia_actual not in dias:
                     continue
+                # Verificar bloqueos
+                cursor.execute('''
+                    SELECT 1 FROM bloqueos 
+                    WHERE barbero_id = %s AND activo = 1 
+                    AND fecha_inicio <= %s AND fecha_fin >= %s
+                ''', (b['id'], fecha, fecha))
+                if cursor.fetchone():
+                    continue
                 cursor.execute('''
                     SELECT 1 FROM citas 
                     WHERE barbero_id = %s AND fecha = %s AND hora_inicio = %s
@@ -254,7 +273,6 @@ def reservar():
                 conn.close()
                 return jsonify({'error': 'No hay barberos disponibles en ese horario'}), 409
         else:
-            # Verificar que el barbero exista y esté activo
             cursor.execute('SELECT dias_trabajo FROM barberos WHERE id = %s AND activo = 1', (barbero_id,))
             b = cursor.fetchone()
             if not b:
@@ -269,7 +287,15 @@ def reservar():
             if dia_actual not in dias:
                 conn.close()
                 return jsonify({'error': 'El barbero no trabaja ese día'}), 400
-            # Verificar que el hueco esté libre para ese barbero
+            # Verificar bloqueos
+            cursor.execute('''
+                SELECT 1 FROM bloqueos 
+                WHERE barbero_id = %s AND activo = 1 
+                AND fecha_inicio <= %s AND fecha_fin >= %s
+            ''', (barbero_id, fecha, fecha))
+            if cursor.fetchone():
+                conn.close()
+                return jsonify({'error': 'El barbero no está disponible ese día'}), 409
             cursor.execute('''
                 SELECT 1 FROM citas 
                 WHERE barbero_id = %s AND fecha = %s AND hora_inicio = %s
@@ -285,14 +311,14 @@ def reservar():
         if cliente:
             cliente_id = cliente['id']
         else:
-                    cursor.execute('''
-            INSERT INTO clientes (nombre, telefono, notas_habituales) 
-            VALUES (%s, %s, %s)
-            RETURNING id
-        ''', (nombre, telefono, notas))
-        cliente_id = cursor.fetchone()['id']
+            cursor.execute('''
+                INSERT INTO clientes (nombre, telefono, notas_habituales) 
+                VALUES (%s, %s, %s)
+                RETURNING id
+            ''', (nombre, telefono, notas))
+            cliente_id = cursor.fetchone()['id']
 
-                cursor.execute('''
+        cursor.execute('''
             INSERT INTO citas 
             (barbero_id, cliente_id, servicio_id, fecha, hora_inicio, hora_fin, 
              estado, tipo_reserva, alerta_cierre, notas_cliente)
@@ -351,7 +377,6 @@ def crear_barbero():
         conn = get_db()
         cursor = conn.cursor()
         dias = data.get('dias_trabajo', ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado'])
-        # ✅ USAR RETURNING id PARA POSTGRESQL
         cursor.execute('''
             INSERT INTO barberos (nombre, telefono, email, dias_trabajo)
             VALUES (%s, %s, %s, %s)
@@ -407,18 +432,15 @@ def eliminar_barbero(barbero_id):
     try:
         conn = get_db()
         cursor = conn.cursor()
-        
-        # Verificar que existe
         cursor.execute('SELECT nombre FROM barberos WHERE id = %s AND activo = 1', (barbero_id,))
         barbero = cursor.fetchone()
         if not barbero:
             conn.close()
             return jsonify({'error': 'Barbero no encontrado o ya desactivado'}), 404
         
-        # Desactivar barbero
         cursor.execute('UPDATE barberos SET activo = 0 WHERE id = %s', (barbero_id,))
         
-        # Cancelar sus citas futuras
+        # Cancelar citas futuras del barbero
         hoy = datetime.now().strftime('%Y-%m-%d')
         cursor.execute('''
             UPDATE citas SET estado = 'cancelada_por_barbero'
@@ -429,7 +451,6 @@ def eliminar_barbero(barbero_id):
         
         conn.commit()
         conn.close()
-        
         return jsonify({
             'mensaje': f'Barbero "{barbero["nombre"]}" desactivado. {canceladas} citas canceladas.',
             'citas_canceladas': canceladas
@@ -704,7 +725,6 @@ def solicitar_modificacion():
     if not all([cita_original_id, nueva_fecha, nueva_hora]):
         return jsonify({'error': 'Faltan datos'}), 400
     try:
-        # Validar que la nueva fecha no sea pasada
         try:
             fecha_cita = datetime.strptime(f"{nueva_fecha} {nueva_hora}", "%Y-%m-%d %H:%M")
             if fecha_cita < datetime.now():
@@ -720,7 +740,6 @@ def solicitar_modificacion():
             conn.close()
             return jsonify({'error': 'Cita original no encontrada'}), 404
 
-        # Verificar que el nuevo hueco esté libre para ese barbero
         cursor.execute('''
             SELECT 1 FROM citas 
             WHERE barbero_id = %s AND fecha = %s AND hora_inicio = %s 
@@ -730,7 +749,6 @@ def solicitar_modificacion():
             conn.close()
             return jsonify({'error': 'El nuevo hueco no está disponible'}), 409
 
-        # Calcular hora de fin según duración del servicio
         cursor.execute('SELECT duracion_minutos FROM servicios WHERE id = %s', (original['servicio_id'],))
         servicio = cursor.fetchone()
         duracion = servicio['duracion_minutos']
@@ -738,7 +756,6 @@ def solicitar_modificacion():
         total_min = h * 60 + m + duracion
         nueva_hora_fin = f"{total_min // 60:02d}:{total_min % 60:02d}"
 
-        # ✅ USAR RETURNING id PARA POSTGRESQL
         cursor.execute('''
             INSERT INTO citas 
             (barbero_id, cliente_id, servicio_id, fecha, hora_inicio, hora_fin, 
@@ -751,10 +768,8 @@ def solicitar_modificacion():
         nueva_cita_id = cursor.fetchone()['id']
         conn.commit()
         conn.close()
-        return jsonify({
-            'mensaje': 'Solicitud de modificación enviada. Espera confirmación del barbero.',
-            'nueva_cita_id': nueva_cita_id
-        })
+        return jsonify({'mensaje': 'Solicitud de modificación enviada. Espera confirmación del barbero.',
+                        'nueva_cita_id': nueva_cita_id})
     except Exception as e:
         logging.error(f"Error en solicitar_modificacion: {e}")
         return jsonify({'error': str(e)}), 500
