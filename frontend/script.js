@@ -115,9 +115,16 @@ function esAdmin() {
 
 function actualizarUISegunRol() {
     const admin = esAdmin();
+    
+    // Forzar visibilidad de tabs solo-admin
     document.querySelectorAll('.solo-admin').forEach(el => {
-        el.style.display = admin ? 'inline-block' : 'none';
+        if (admin) {
+            el.style.setProperty('display', 'inline-block', 'important');
+        } else {
+            el.style.setProperty('display', 'none', 'important');
+        }
     });
+    
     const tabConfig = document.querySelector('#tabsBarbero button:last-child');
     if (tabConfig) tabConfig.textContent = admin ? 'Configuracion' : 'Bloquear dias';
     
@@ -855,6 +862,7 @@ async function bloquearDias() {
 // ===== INICIALIZACIÓN =====
 document.addEventListener('DOMContentLoaded', function() {
     cargarSesion();
+    actualizarUISegunRol();  // ← NUEVA LÍNEA
     try {
         const f = new Date(); f.setDate(f.getDate() + 1);
         const fStr = f.toISOString().split('T')[0];

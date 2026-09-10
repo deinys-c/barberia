@@ -232,28 +232,45 @@ def init_db():
         ''', (username, pwd_hash, barbero_id))
         print(f"✅ Usuario: {username} / {password}")
 
-    # ===== CATALOGO POR DEFECTO =====
+# ===== CATALOGO POR DEFECTO =====
     cursor.execute('SELECT COUNT(*) as cnt FROM catalogo')
     if cursor.fetchone()['cnt'] == 0:
         items = [
-            ('producto', 'cera.jpg', 'Cera Modeladora', 'Fijacion media, acabado mate', '$35.000 COP', 1),
-            ('producto', 'bruma.jpg', 'Bruma Capilar', 'Hidratacion y brillo natural', '$28.000 COP', 2),
-            ('producto', 'aceite.jpg', 'Aceite de Barba', 'Suaviza y nutre la barba', '$32.000 COP', 3),
-            ('producto', 'shampoo.jpg', 'Shampoo Solido', 'Limpieza profunda sin quimicos', '$25.000 COP', 4),
-            ('producto', 'pomada.jpg', 'Pomada Clasica', 'Fijacion fuerte, brillo intenso', '$30.000 COP', 5),
-            ('estilo', 'clasico.jpg', 'Corte Clasico', '', '', 1),
-            ('estilo', 'fade.jpg', 'Fade Moderno', '', '', 2),
-            ('estilo', 'militar.jpg', 'Corte Militar', '', '', 3),
-            ('estilo', 'pompadour.jpg', 'Pompadour', '', '', 4),
-            ('estilo', 'texturizado.jpg', 'Corte Texturizado', '', '', 5),
-            ('estilo', 'barba.jpg', 'Barba Perfilada', '', '', 6)
+            # PRODUCTOS (20)
+            ('producto', 'producto1.jpg', 'Producto 1', 'Descripcion del producto 1', '$20.000 COP', 1),
+            ('producto', 'producto2.jpg', 'Producto 2', 'Descripcion del producto 2', '$20.000 COP', 2),
+            ('producto', 'producto3.jpg', 'Producto 3', 'Descripcion del producto 3', '$20.000 COP', 3),
+            ('producto', 'producto4.jpg', 'Producto 4', 'Descripcion del producto 4', '$20.000 COP', 4),
+            ('producto', 'producto5.jpg', 'Producto 5', 'Descripcion del producto 5', '$20.000 COP', 5),
+            ('producto', 'producto6.jpg', 'Producto 6', 'Descripcion del producto 6', '$20.000 COP', 6),
+            ('producto', 'producto7.jpg', 'Producto 7', 'Descripcion del producto 7', '$20.000 COP', 7),
+            ('producto', 'producto8.jpg', 'Producto 8', 'Descripcion del producto 8', '$20.000 COP', 8),
+            ('producto', 'producto9.jpg', 'Producto 9', 'Descripcion del producto 9', '$20.000 COP', 9),
+            ('producto', 'producto10.jpg', 'Producto 10', 'Descripcion del producto 10', '$20.000 COP', 10),
+            ('producto', 'producto11.jpg', 'Producto 11', 'Descripcion del producto 11', '$20.000 COP', 11),
+            ('producto', 'producto12.jpg', 'Producto 12', 'Descripcion del producto 12', '$20.000 COP', 12),
+            ('producto', 'producto13.jpg', 'Producto 13', 'Descripcion del producto 13', '$20.000 COP', 13),
+            ('producto', 'producto14.jpg', 'Producto 14', 'Descripcion del producto 14', '$20.000 COP', 14),
+            ('producto', 'producto15.jpg', 'Producto 15', 'Descripcion del producto 15', '$20.000 COP', 15),
+            ('producto', 'producto16.jpg', 'Producto 16', 'Descripcion del producto 16', '$20.000 COP', 16),
+            ('producto', 'producto17.jpg', 'Producto 17', 'Descripcion del producto 17', '$20.000 COP', 17),
+            ('producto', 'producto18.jpg', 'Producto 18', 'Descripcion del producto 18', '$20.000 COP', 18),
+            ('producto', 'producto19.jpg', 'Producto 19', 'Descripcion del producto 19', '$20.000 COP', 19),
+            ('producto', 'producto20.jpg', 'Producto 20', 'Descripcion del producto 20', '$20.000 COP', 20),
+            # CORTES/ESTILOS (6)
+            ('estilo', 'corte1.jpg', 'Corte 1', '', '', 1),
+            ('estilo', 'corte2.jpg', 'Corte 2', '', '', 2),
+            ('estilo', 'corte3.jpg', 'Corte 3', '', '', 3),
+            ('estilo', 'corte4.jpg', 'Corte 4', '', '', 4),
+            ('estilo', 'corte5.jpg', 'Corte 5', '', '', 5),
+            ('estilo', 'corte6.jpg', 'Corte 6', '', '', 6),
         ]
         for tipo, archivo, nombre, descripcion, precio, orden in items:
             cursor.execute('''
                 INSERT INTO catalogo (tipo, archivo, nombre, descripcion, precio, orden, activo)
                 VALUES (%s, %s, %s, %s, %s, %s, 1)
             ''', (tipo, archivo, nombre, descripcion, precio, orden))
-        print("✅ Catalogo por defecto creado (5 productos, 6 estilos)")
+        print(f"✅ Catalogo por defecto creado ({len(items)} items)")
 
     conn.commit()
     conn.close()
