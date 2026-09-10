@@ -393,16 +393,6 @@ def reservar():
         logging.error(f"Error en reservar: {e}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/test-telegram', methods=['GET'])
-def test_telegram():
-    """Endpoint temporal para probar Telegram desde el servidor."""
-    resultado = enviar_telegram("🧪 Prueba desde Render - Gocho Barber funcionando")
-    return jsonify({
-        'enviado': resultado,
-        'token_configurado': bool(TELEGRAM_TOKEN),
-        'chat_id_configurado': bool(TELEGRAM_CHAT_ID)
-    })
-
 # ========== PANEL BARBERO (ADMIN) ==========
 
 @app.route('/api/panel/login', methods=['POST'])
