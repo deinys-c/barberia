@@ -1069,13 +1069,17 @@ def solicitar_modificacion():
 
 # ========== LIMPIEZA (TEMPORAL) ==========
 
-@app.route('/api/admin/reset-db', methods=['POST'])
+@app.route('/api/admin/reset-db', methods=['GET', 'POST'])
 def reset_db():
     """⚠️ TEMPORAL: Limpia toda la BD y recrea datos por defecto."""
-    data = request.json or {}
-    token = data.get('token', '')
+    # Token puede venir por query string (?token=...) o por JSON
+    token = request.args.get('token', '')
+    if not token and request.is_json:
+        data = request.json or {}
+        token = data.get('token', '')
     if token != 'reset2026':
         return jsonify({'error': 'Token inválido'}), 403
+    
     try:
         conn = get_db()
         cursor = conn.cursor()
