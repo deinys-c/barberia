@@ -138,6 +138,7 @@
                 <div>
                     <label>Fecha</label>
                     <input type="date" id="fecha">
+                    <input type="date" id="fecha" min="">
                 </div>
             </div>
             <button class="btn" onclick="cargarHuecos()">Ver horas disponibles</button>
@@ -713,6 +714,10 @@ function cargarEstilos() {
 
     // ===== INICIALIZACION =====
     document.addEventListener('DOMContentLoaded', function() {
+        // Establecer fecha mínima (hoy)
+        const hoy = new Date();
+        const hoyStr = hoy.toISOString().split('T')[0];
+        document.getElementById('fecha').min = hoyStr;
         const fecha = new Date();
         fecha.setDate(fecha.getDate() + 1);
         const fechaStr = fecha.toISOString().split('T')[0];
