@@ -380,6 +380,15 @@ function cargarEstilos() {
         const notas = document.getElementById('notas').value.trim();
         if (!nombre) { alert('El nombre es obligatorio'); return; }
         if (!horaSeleccionada) { alert('Selecciona una hora'); return; }
+            // ===== VALIDACIÓN: No permitir reservas en el pasado =====
+        const ahora = new Date();
+        const [year, month, day] = fecha.split('-').map(Number);
+        const [hora, minuto] = horaSeleccionada.split(':').map(Number);
+        const fechaCita = new Date(year, month - 1, day, hora, minuto);
+        if (fechaCita < ahora) {
+            alert('No se pueden hacer reservas en el pasado');
+            return;
+        }
         const body = { fecha, hora_inicio: horaSeleccionada, servicio_id: parseInt(servicio), nombre, telefono, notas };
         try {
             const res = await fetch(`${API_URL}/api/reservar`, {

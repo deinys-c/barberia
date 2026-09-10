@@ -116,7 +116,14 @@ def reservar():
     required = ['fecha', 'hora_inicio', 'servicio_id', 'nombre']
     if not all(k in data for k in required):
         return jsonify({'error': 'Faltan datos obligatorios'}), 400
-
+        # ===== VALIDACIÓN: No permitir reservas en el pasado =====
+    try:
+        fecha_cita = datetime.strptime(f"{data['fecha']} {data['hora_inicio']}", "%Y-%m-%d %H:%M")
+        if fecha_cita < datetime.now():
+            return jsonify({'error': 'No se pueden hacer reservas en el pasado'}), 400
+    except ValueError:
+        return jsonify({'error': 'Formato de fecha u hora inválido'}), 400
+    # ===== FIN VALIDACIÓN =====
     try:
         fecha = data['fecha']
         hora_inicio = data['hora_inicio']
