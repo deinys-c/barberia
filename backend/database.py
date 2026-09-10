@@ -3,6 +3,7 @@ import json
 import psycopg2
 import psycopg2.extras
 import sqlite3
+from werkzeug.security import generate_password_hash
 
 DATABASE_URL = os.getenv('DATABASE_URL')
 USING_POSTGRES = DATABASE_URL is not None and DATABASE_URL.startswith('postgres')
@@ -118,6 +119,19 @@ def init_db():
         )
     ''')
 
+    # ===== TABLA USUARIOS (NUEVO) =====
+    cursor.execute(f'''
+        CREATE TABLE IF NOT EXISTS usuarios (
+            id {id_def},
+            username TEXT NOT NULL UNIQUE,
+            password_hash TEXT NOT NULL,
+            rol TEXT NOT NULL DEFAULT 'barbero',
+            barbero_id INTEGER,
+            activo INTEGER DEFAULT 1,
+            FOREIGN KEY (barbero_id) REFERENCES barberos(id)
+        )
+    ''')
+
     # ===== DATOS DE PRUEBA (SI NO EXISTEN) =====
     if is_postgres:
         cursor.execute("SELECT 1 FROM barberos LIMIT 1")
@@ -130,14 +144,47 @@ def init_db():
         cursor.execute('''
             INSERT INTO barberos (nombre, telefono, email) 
             VALUES ('Barbero Principal', '123456789', 'barbero@barberia.com')
+            RETURNING id
+        ''') if is_postgres else cursor.execute('''
+            INSERT INTO barberos (nombre, telefono, email) 
+            VALUES ('Barbero Principal', '123456789', 'barbero@barberia.com')
         ''')
+        
+        if is_postgres:
+            barbero_id = cursor.fetchone()['id']
+        else:
+            barbero_id = cursor.lastrowid
+        
         cursor.execute('''
             INSERT INTO servicios (nombre, duracion_minutos, precio) VALUES
             ('Corte', 45, 25000),
             ('Barba', 30, 15000),
             ('Combo (Corte + Barba)', 75, 30000)
         ''')
-        print("✅ Datos de prueba insertados (1 barbero, 3 servicios)")
+        
+        # Crear usuario admin por defecto
+        admin_hash = generate_password_hash('barberia2026')
+        cursor.execute('''
+            INSERT INTO usuarios (username, password_hash, rol, barbero_id)
+            VALUES ('admin', %s, 'admin', NULL)
+        ''' if is_postgres else '''
+            INSERT INTO usuarios (username, password_hash, rol, barbero_id)
+            VALUES ('admin', ?, 'admin', NULL)
+        ''', (admin_hash,))
+        
+        # Crear usuario para el barbero principal
+        barbero_hash = generate_password_hash('barbero123')
+        cursor.execute('''
+            INSERT INTO usuarios (username, password_hash, rol, barbero_id)
+            VALUES ('barbero', %s, 'barbero', %s)
+        ''' if is_postgres else '''
+            INSERT INTO usuarios (username, password_hash, rol, barbero_id)
+            VALUES ('barbero', ?, 'barbero', ?)
+        ''', (barbero_hash, barbero_id))
+        
+        print("✅ Datos de prueba insertados:")
+        print("   - Admin: admin / barberia2026")
+        print("   - Barbero: barbero / barbero123")
 
     conn.commit()
     conn.close()

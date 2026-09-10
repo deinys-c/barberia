@@ -1,11 +1,10 @@
 import os
 import json
 import logging
-import threading
-import time
-from datetime import datetime, timedelta
-from flask import Flask, request, jsonify, session
+from datetime import datetime, timedelta, timezone
+from flask import Flask, request, jsonify
 from flask_cors import CORS
+from werkzeug.security import generate_password_hash, check_password_hash
 from database import get_db, init_db
 import requests
 
@@ -19,9 +18,12 @@ logging.basicConfig(
     format='%(asctime)s - %(message)s'
 )
 
-SIMULAR_FALLO_NOTIFICACION = os.environ.get('SIMULAR_FALLO', 'False').lower() == 'true'
-TIEMPO_ESPERA_FALLO_MIN = int(os.environ.get('TIEMPO_ESPERA', '20'))
-BARBERO_PASSWORD = os.environ.get('BARBERO_PASSWORD', 'barberia2026')
+# ===== CONFIGURACIÓN DE ZONA HORARIA (VENEZUELA UTC-4) =====
+ZONA_HORARIA_VE = timezone(timedelta(hours=-4))
+
+def ahora_ve():
+    """Devuelve la fecha/hora actual en zona horaria de Venezuela."""
+    return datetime.now(ZONA_HORARIA_VE)
 
 # ===== CONFIGURACIÓN TELEGRAM =====
 TELEGRAM_TOKEN = os.environ.get('TELEGRAM_TOKEN', '')
@@ -39,16 +41,45 @@ def es_dia_habil(fecha_str):
     except ValueError:
         return False
 
-def verificar_barbero():
-    password = request.headers.get('X-Password')
-    return password == BARBERO_PASSWORD
+def obtener_usuario_actual():
+    """Obtiene el usuario autenticado desde el header X-Username."""
+    username = request.headers.get('X-Username')
+    if not username:
+        return None
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute('SELECT id, username, rol, barbero_id, activo FROM usuarios WHERE username = %s AND activo = 1', (username,))
+        user = cursor.fetchone()
+        conn.close()
+        if user:
+            return dict(user)
+        return None
+    except Exception:
+        return None
+
+def requiere_autenticacion():
+    """Verifica que haya un usuario autenticado."""
+    user = obtener_usuario_actual()
+    if not user:
+        return None, jsonify({'error': 'No autenticado'}), 401
+    return user, None, None
+
+def requiere_admin():
+    """Verifica que el usuario sea admin."""
+    user = obtener_usuario_actual()
+    if not user:
+        return None, jsonify({'error': 'No autenticado'}), 401
+    if user['rol'] != 'admin':
+        return None, jsonify({'error': 'Requiere permisos de administrador'}), 403
+    return user, None, None
 
 def actualizar_citas_pasadas():
     """Marca citas pasadas como realizadas/expiradas."""
     try:
         conn = get_db()
         cursor = conn.cursor()
-        hoy = datetime.now().strftime('%Y-%m-%d')
+        hoy = ahora_ve().strftime('%Y-%m-%d')
         cursor.execute("UPDATE citas SET estado = 'realizada' WHERE fecha < %s AND estado = 'confirmada'", (hoy,))
         cursor.execute("UPDATE citas SET estado = 'expirada' WHERE fecha < %s AND estado = 'pendiente_confirmacion'", (hoy,))
         conn.commit()
@@ -57,44 +88,24 @@ def actualizar_citas_pasadas():
         logging.error(f"Error actualizando citas pasadas: {e}")
 
 def enviar_telegram(mensaje, chat_id=None):
-    """
-    Envía un mensaje por Telegram.
-    Si no se especifica chat_id, usa el configurado por defecto.
-    """
+    """Envía un mensaje por Telegram."""
     if not TELEGRAM_TOKEN:
-        logging.warning("Telegram no configurado: falta TELEGRAM_TOKEN")
         return False
-    
     destinatario = chat_id or TELEGRAM_CHAT_ID
     if not destinatario:
-        logging.warning("Telegram no configurado: falta TELEGRAM_CHAT_ID")
         return False
-    
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-    data = {
-        "chat_id": str(destinatario),
-        "text": mensaje,
-        "parse_mode": "HTML"
-    }
-    
+    data = {"chat_id": str(destinatario), "text": mensaje, "parse_mode": "HTML"}
     try:
         response = requests.post(url, json=data, timeout=10)
         response.raise_for_status()
-        logging.info(f"Telegram enviado a {destinatario}")
         return True
     except Exception as e:
         logging.error(f"Error enviando Telegram: {e}")
-        if hasattr(e, 'response') and e.response:
-            logging.error(f"Respuesta: {e.response.text}")
         return False
 
 def calcular_huecos_libres(fecha_str, barbero_id=0):
-    """
-    Genera horas disponibles.
-    - barbero_id > 0: solo ese barbero.
-    - barbero_id = 0: cualquier barbero activo.
-    Considera bloqueos.
-    """
+    """Genera horas disponibles."""
     conn = get_db()
     cursor = conn.cursor()
 
@@ -166,7 +177,6 @@ def calcular_huecos_libres(fecha_str, barbero_id=0):
                 dias = DIAS_ES[:6]
             if dia_actual not in dias:
                 continue
-            
             cursor.execute('''
                 SELECT 1 FROM bloqueos 
                 WHERE barbero_id = %s AND activo = 1 
@@ -174,7 +184,6 @@ def calcular_huecos_libres(fecha_str, barbero_id=0):
             ''', (b['id'], fecha_str, fecha_str))
             if cursor.fetchone():
                 continue
-            
             barberos_hoy.append(b['id'])
         
         if not barberos_hoy:
@@ -236,7 +245,8 @@ def reservar():
 
     try:
         fecha_cita = datetime.strptime(f"{data['fecha']} {data['hora_inicio']}", "%Y-%m-%d %H:%M")
-        if fecha_cita < datetime.now():
+        fecha_cita = fecha_cita.replace(tzinfo=ZONA_HORARIA_VE)
+        if fecha_cita < ahora_ve():
             return jsonify({'error': 'No se pueden hacer reservas en el pasado'}), 400
     except ValueError:
         return jsonify({'error': 'Formato de fecha u hora inválido'}), 400
@@ -269,12 +279,10 @@ def reservar():
         hora_fin = f"{total_min // 60:02d}:{total_min % 60:02d}"
         alerta_cierre = 1 if total_min > 17 * 60 else 0
 
-        ahora = datetime.now()
-        diff_min = (fecha_cita - ahora).total_seconds() / 60
+        diff_min = (fecha_cita - ahora_ve()).total_seconds() / 60
         tipo_reserva = 'urgente' if diff_min < 60 else 'normal'
         estado = 'confirmada' if tipo_reserva == 'normal' else 'pendiente_confirmacion'
 
-        # Asignar barbero si es 0 (cualquiera disponible)
         if barbero_id == 0:
             cursor.execute('SELECT id, nombre, dias_trabajo FROM barberos WHERE activo = 1')
             barberos = cursor.fetchall()
@@ -340,7 +348,6 @@ def reservar():
                 conn.close()
                 return jsonify({'error': 'El hueco ya no está disponible'}), 409
 
-        # Crear o buscar cliente
         cursor.execute('SELECT id FROM clientes WHERE nombre = %s AND telefono = %s', (nombre, telefono))
         cliente = cursor.fetchone()
         if cliente:
@@ -365,7 +372,6 @@ def reservar():
         conn.commit()
         conn.close()
 
-        # ===== NOTIFICACIÓN POR TELEGRAM =====
         try:
             emoji_estado = "⚠️ URGENTE - Requiere confirmación" if tipo_reserva == 'urgente' else "✅ Confirmada automáticamente"
             mensaje = (
@@ -384,7 +390,6 @@ def reservar():
             logging.error(f"Error notificando cita por Telegram: {e}")
 
         if tipo_reserva == 'urgente':
-            logging.info(f"CITA {cita_id} - Reserva urgente: {nombre} - {fecha} {hora_inicio}")
             return jsonify({'mensaje': 'Solicitud urgente enviada. Esperando confirmación del barbero.',
                             'citaId': cita_id, 'estado': 'pendiente_confirmacion'})
         else:
@@ -393,22 +398,39 @@ def reservar():
         logging.error(f"Error en reservar: {e}")
         return jsonify({'error': str(e)}), 500
 
-# ========== PANEL BARBERO (ADMIN) ==========
+# ========== LOGIN ==========
 
-@app.route('/api/panel/login', methods=['POST'])
-def login_barbero():
+@app.route('/api/login', methods=['POST'])
+def login():
     data = request.json
+    username = data.get('username', '').strip()
     password = data.get('password', '')
-    if password == BARBERO_PASSWORD:
-        return jsonify({'mensaje': 'Login exitoso', 'autenticado': True})
-    return jsonify({'error': 'Contraseña incorrecta'}), 401
+    if not username or not password:
+        return jsonify({'error': 'Usuario y contraseña requeridos'}), 400
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute('SELECT id, username, password_hash, rol, barbero_id FROM usuarios WHERE username = %s AND activo = 1', (username,))
+        user = cursor.fetchone()
+        conn.close()
+        if not user or not check_password_hash(user['password_hash'], password):
+            return jsonify({'error': 'Usuario o contraseña incorrectos'}), 401
+        return jsonify({
+            'mensaje': 'Login exitoso',
+            'username': user['username'],
+            'rol': user['rol'],
+            'barbero_id': user['barbero_id']
+        })
+    except Exception as e:
+        logging.error(f"Error en login: {e}")
+        return jsonify({'error': str(e)}), 500
 
-# ----- GESTIÓN DE BARBEROS (ADMIN) -----
+# ========== GESTIÓN DE BARBEROS (SOLO ADMIN) ==========
 
 @app.route('/api/admin/barberos', methods=['GET'])
 def listar_barberos():
-    if not verificar_barbero():
-        return jsonify({'error': 'No autorizado'}), 401
+    user, error, code = requiere_autenticacion()
+    if error: return error, code
     try:
         conn = get_db()
         cursor = conn.cursor()
@@ -421,8 +443,8 @@ def listar_barberos():
 
 @app.route('/api/admin/barberos', methods=['POST'])
 def crear_barbero():
-    if not verificar_barbero():
-        return jsonify({'error': 'No autorizado'}), 401
+    user, error, code = requiere_admin()
+    if error: return error, code
     data = request.json
     if not data.get('nombre'):
         return jsonify({'error': 'El nombre es obligatorio'}), 400
@@ -437,6 +459,17 @@ def crear_barbero():
         ''', (data['nombre'].strip(), data.get('telefono', '').strip(),
               data.get('email', '').strip(), json.dumps(dias)))
         nuevo_id = cursor.fetchone()['id']
+        
+        # Crear usuario para el barbero si se proporciona
+        username = data.get('username', '').strip()
+        password = data.get('password', '').strip()
+        if username and password:
+            pwd_hash = generate_password_hash(password)
+            cursor.execute('''
+                INSERT INTO usuarios (username, password_hash, rol, barbero_id)
+                VALUES (%s, %s, 'barbero', %s)
+            ''', (username, pwd_hash, nuevo_id))
+        
         conn.commit()
         conn.close()
 
@@ -449,8 +482,8 @@ def crear_barbero():
 
 @app.route('/api/admin/barberos/<int:barbero_id>', methods=['PUT'])
 def actualizar_barbero(barbero_id):
-    if not verificar_barbero():
-        return jsonify({'error': 'No autorizado'}), 401
+    user, error, code = requiere_admin()
+    if error: return error, code
     data = request.json
     try:
         conn = get_db()
@@ -470,11 +503,21 @@ def actualizar_barbero(barbero_id):
             campos.append('dias_trabajo = %s'); valores.append(json.dumps(data['dias_trabajo']))
         if 'activo' in data:
             campos.append('activo = %s'); valores.append(1 if data['activo'] else 0)
-        if not campos:
-            conn.close()
-            return jsonify({'error': 'No hay campos para actualizar'}), 400
-        valores.append(barbero_id)
-        cursor.execute(f"UPDATE barberos SET {', '.join(campos)} WHERE id = %s", valores)
+        if campos:
+            valores.append(barbero_id)
+            cursor.execute(f"UPDATE barberos SET {', '.join(campos)} WHERE id = %s", valores)
+        
+        # Actualizar usuario si se proporciona
+        username = data.get('username', '').strip()
+        password = data.get('password', '').strip()
+        if username and password:
+            pwd_hash = generate_password_hash(password)
+            cursor.execute('SELECT id FROM usuarios WHERE barbero_id = %s', (barbero_id,))
+            if cursor.fetchone():
+                cursor.execute('UPDATE usuarios SET username = %s, password_hash = %s WHERE barbero_id = %s', (username, pwd_hash, barbero_id))
+            else:
+                cursor.execute('INSERT INTO usuarios (username, password_hash, rol, barbero_id) VALUES (%s, %s, \'barbero\', %s)', (username, pwd_hash, barbero_id))
+        
         conn.commit()
         conn.close()
         return jsonify({'mensaje': 'Barbero actualizado exitosamente'})
@@ -483,8 +526,8 @@ def actualizar_barbero(barbero_id):
 
 @app.route('/api/admin/barberos/<int:barbero_id>', methods=['DELETE'])
 def eliminar_barbero(barbero_id):
-    if not verificar_barbero():
-        return jsonify({'error': 'No autorizado'}), 401
+    user, error, code = requiere_admin()
+    if error: return error, code
     try:
         conn = get_db()
         cursor = conn.cursor()
@@ -495,8 +538,9 @@ def eliminar_barbero(barbero_id):
             return jsonify({'error': 'Barbero no encontrado o ya desactivado'}), 404
         
         cursor.execute('UPDATE barberos SET activo = 0 WHERE id = %s', (barbero_id,))
+        cursor.execute('UPDATE usuarios SET activo = 0 WHERE barbero_id = %s', (barbero_id,))
         
-        hoy = datetime.now().strftime('%Y-%m-%d')
+        hoy = ahora_ve().strftime('%Y-%m-%d')
         cursor.execute('''
             UPDATE citas SET estado = 'cancelada_por_barbero'
             WHERE barbero_id = %s AND fecha >= %s
@@ -517,18 +561,17 @@ def eliminar_barbero(barbero_id):
         logging.error(f"Error desactivando barbero: {e}")
         return jsonify({'error': str(e)}), 500
 
-# ----- PANEL: CITAS -----
+# ========== PANEL: CITAS ==========
 
 @app.route('/api/panel/pendientes', methods=['GET'])
 def listar_pendientes():
-    if not verificar_barbero():
-        return jsonify({'error': 'No autorizado'}), 401
-    barbero_id = request.args.get('barbero_id', 0, type=int)
+    user, error, code = requiere_autenticacion()
+    if error: return error, code
     try:
         actualizar_citas_pasadas()
         conn = get_db()
         cursor = conn.cursor()
-        hoy = datetime.now().strftime('%Y-%m-%d')
+        hoy = ahora_ve().strftime('%Y-%m-%d')
         query = '''
             SELECT c.id, c.fecha, c.hora_inicio, c.hora_fin, c.estado, c.tipo_reserva,
                    cl.nombre as cliente, cl.telefono, s.nombre as servicio,
@@ -541,9 +584,10 @@ def listar_pendientes():
             WHERE c.estado = 'pendiente_confirmacion' AND c.fecha >= %s
         '''
         params = [hoy]
-        if barbero_id > 0:
+        # Si es barbero, filtrar solo sus citas
+        if user['rol'] == 'barbero' and user['barbero_id']:
             query += ' AND c.barbero_id = %s'
-            params.append(barbero_id)
+            params.append(user['barbero_id'])
         query += ' ORDER BY c.fecha, c.hora_inicio'
         cursor.execute(query, params)
         citas = cursor.fetchall()
@@ -554,9 +598,8 @@ def listar_pendientes():
 
 @app.route('/api/panel/historial', methods=['GET'])
 def historial_citas():
-    if not verificar_barbero():
-        return jsonify({'error': 'No autorizado'}), 401
-    barbero_id = request.args.get('barbero_id', 0, type=int)
+    user, error, code = requiere_autenticacion()
+    if error: return error, code
     try:
         actualizar_citas_pasadas()
         conn = get_db()
@@ -571,9 +614,9 @@ def historial_citas():
             JOIN barberos b ON c.barbero_id = b.id
         '''
         params = []
-        if barbero_id > 0:
+        if user['rol'] == 'barbero' and user['barbero_id']:
             query += ' WHERE c.barbero_id = %s'
-            params.append(barbero_id)
+            params.append(user['barbero_id'])
         query += ' ORDER BY c.fecha DESC, c.hora_inicio DESC LIMIT 100'
         cursor.execute(query, params)
         citas = cursor.fetchall()
@@ -584,8 +627,8 @@ def historial_citas():
 
 @app.route('/api/panel/confirmar-cita', methods=['POST'])
 def confirmar_cita():
-    if not verificar_barbero():
-        return jsonify({'error': 'No autorizado'}), 401
+    user, error, code = requiere_autenticacion()
+    if error: return error, code
     data = request.json
     cita_id = data.get('cita_id')
     if not cita_id:
@@ -593,11 +636,15 @@ def confirmar_cita():
     try:
         conn = get_db()
         cursor = conn.cursor()
-        cursor.execute('SELECT estado, cita_original_id FROM citas WHERE id = %s', (cita_id,))
+        cursor.execute('SELECT estado, cita_original_id, barbero_id FROM citas WHERE id = %s', (cita_id,))
         cita = cursor.fetchone()
         if not cita:
             conn.close()
             return jsonify({'error': 'Cita no encontrada'}), 404
+        # Si es barbero, verificar que sea su cita
+        if user['rol'] == 'barbero' and cita['barbero_id'] != user['barbero_id']:
+            conn.close()
+            return jsonify({'error': 'No autorizado para esta cita'}), 403
         if cita['estado'] != 'pendiente_confirmacion':
             conn.close()
             return jsonify({'error': 'La cita no está pendiente'}), 400
@@ -606,17 +653,15 @@ def confirmar_cita():
             cursor.execute("UPDATE citas SET estado = 'cancelada_por_barbero' WHERE id = %s", (cita['cita_original_id'],))
         conn.commit()
         conn.close()
-
-        enviar_telegram(f"✅ <b>Cita #{cita_id} CONFIRMADA</b> desde el panel.")
-
+        enviar_telegram(f"✅ <b>Cita #{cita_id} CONFIRMADA</b> por {user['username']}")
         return jsonify({'mensaje': 'Cita confirmada exitosamente'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/panel/rechazar-cita', methods=['POST'])
 def rechazar_cita():
-    if not verificar_barbero():
-        return jsonify({'error': 'No autorizado'}), 401
+    user, error, code = requiere_autenticacion()
+    if error: return error, code
     data = request.json
     cita_id = data.get('cita_id')
     if not cita_id:
@@ -624,28 +669,29 @@ def rechazar_cita():
     try:
         conn = get_db()
         cursor = conn.cursor()
-        cursor.execute('SELECT estado FROM citas WHERE id = %s', (cita_id,))
+        cursor.execute('SELECT estado, barbero_id FROM citas WHERE id = %s', (cita_id,))
         cita = cursor.fetchone()
         if not cita:
             conn.close()
             return jsonify({'error': 'Cita no encontrada'}), 404
+        if user['rol'] == 'barbero' and cita['barbero_id'] != user['barbero_id']:
+            conn.close()
+            return jsonify({'error': 'No autorizado para esta cita'}), 403
         if cita['estado'] != 'pendiente_confirmacion':
             conn.close()
             return jsonify({'error': 'La cita no está pendiente'}), 400
         cursor.execute("UPDATE citas SET estado = 'cancelada_por_barbero' WHERE id = %s", (cita_id,))
         conn.commit()
         conn.close()
-
-        enviar_telegram(f"❌ <b>Cita #{cita_id} RECHAZADA</b> desde el panel.")
-
+        enviar_telegram(f"❌ <b>Cita #{cita_id} RECHAZADA</b> por {user['username']}")
         return jsonify({'mensaje': 'Cita rechazada'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/panel/cancelar-cita-confirmada', methods=['POST'])
 def cancelar_cita_confirmada():
-    if not verificar_barbero():
-        return jsonify({'error': 'No autorizado'}), 401
+    user, error, code = requiere_autenticacion()
+    if error: return error, code
     data = request.json
     cita_id = data.get('cita_id')
     if not cita_id:
@@ -653,38 +699,47 @@ def cancelar_cita_confirmada():
     try:
         conn = get_db()
         cursor = conn.cursor()
-        cursor.execute('SELECT estado, fecha FROM citas WHERE id = %s', (cita_id,))
+        cursor.execute('SELECT estado, fecha, barbero_id FROM citas WHERE id = %s', (cita_id,))
         cita = cursor.fetchone()
         if not cita:
             conn.close()
             return jsonify({'error': 'Cita no encontrada'}), 404
+        if user['rol'] == 'barbero' and cita['barbero_id'] != user['barbero_id']:
+            conn.close()
+            return jsonify({'error': 'No autorizado para esta cita'}), 403
         if cita['estado'] != 'confirmada':
             conn.close()
             return jsonify({'error': 'Solo se pueden cancelar citas confirmadas'}), 400
-        if cita['fecha'] < datetime.now().strftime('%Y-%m-%d'):
+        if cita['fecha'] < ahora_ve().strftime('%Y-%m-%d'):
             conn.close()
             return jsonify({'error': 'No se pueden cancelar citas pasadas'}), 400
         cursor.execute("UPDATE citas SET estado = 'cancelada_por_barbero' WHERE id = %s", (cita_id,))
         conn.commit()
         conn.close()
-
-        enviar_telegram(f"🚫 <b>Cita #{cita_id} CANCELADA</b> desde el panel.")
-
+        enviar_telegram(f"🚫 <b>Cita #{cita_id} CANCELADA</b> por {user['username']}")
         return jsonify({'mensaje': 'Cita cancelada exitosamente'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/panel/bloquear', methods=['POST'])
 def bloquear_dias():
-    if not verificar_barbero():
-        return jsonify({'error': 'No autorizado'}), 401
+    user, error, code = requiere_autenticacion()
+    if error: return error, code
     data = request.json
     fecha_inicio = data.get('fecha_inicio')
     fecha_fin = data.get('fecha_fin')
     motivo = data.get('motivo', 'Descanso')
-    barbero_id = int(data.get('barbero_id', 1))
     if not fecha_inicio or not fecha_fin:
         return jsonify({'error': 'Faltan fechas'}), 400
+    
+    # Si es admin, puede especificar barbero_id; si es barbero, usa el suyo
+    if user['rol'] == 'admin':
+        barbero_id = int(data.get('barbero_id', 1))
+    else:
+        barbero_id = user['barbero_id']
+        if not barbero_id:
+            return jsonify({'error': 'No tienes barbero asociado'}), 400
+    
     try:
         conn = get_db()
         cursor = conn.cursor()
@@ -703,17 +758,15 @@ def bloquear_dias():
         ''', (barbero_id, fecha_inicio, fecha_fin, motivo))
         conn.commit()
         conn.close()
-
-        enviar_telegram(f"📅 <b>Días bloqueados</b>\nDesde: {fecha_inicio}\nHasta: {fecha_fin}\nMotivo: {motivo}")
-
+        enviar_telegram(f"📅 <b>Días bloqueados</b>\nPor: {user['username']}\nDesde: {fecha_inicio}\nHasta: {fecha_fin}\nMotivo: {motivo}")
         return jsonify({'mensaje': 'Bloqueo agregado correctamente'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/panel/cancelar-citas-masivo', methods=['POST'])
 def cancelar_masivo():
-    if not verificar_barbero():
-        return jsonify({'error': 'No autorizado'}), 401
+    user, error, code = requiere_autenticacion()
+    if error: return error, code
     data = request.json
     ids = data.get('cita_ids', [])
     if not ids:
@@ -726,9 +779,7 @@ def cancelar_masivo():
         afectadas = cursor.rowcount
         conn.commit()
         conn.close()
-
-        enviar_telegram(f"🚫 <b>{afectadas} citas canceladas</b> por bloqueo del barbero.")
-
+        enviar_telegram(f"🚫 <b>{afectadas} citas canceladas</b> por {user['username']}")
         return jsonify({'mensaje': f'{afectadas} citas canceladas'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -744,7 +795,7 @@ def mis_citas():
         actualizar_citas_pasadas()
         conn = get_db()
         cursor = conn.cursor()
-        hoy = datetime.now().strftime('%Y-%m-%d')
+        hoy = ahora_ve().strftime('%Y-%m-%d')
         cursor.execute('''
             SELECT c.id, c.fecha, c.hora_inicio, c.hora_fin, c.estado, s.nombre as servicio,
                    b.nombre as barbero, c.alerta_cierre
@@ -779,15 +830,13 @@ def cancelar_cita_cliente():
         if cita['estado'] not in ('confirmada', 'pendiente_confirmacion'):
             conn.close()
             return jsonify({'error': 'No se puede cancelar esta cita'}), 400
-        if cita['fecha'] < datetime.now().strftime('%Y-%m-%d'):
+        if cita['fecha'] < ahora_ve().strftime('%Y-%m-%d'):
             conn.close()
             return jsonify({'error': 'No se pueden cancelar citas pasadas'}), 400
         cursor.execute("UPDATE citas SET estado = 'cancelada_por_cliente' WHERE id = %s", (cita_id,))
         conn.commit()
         conn.close()
-
         enviar_telegram(f"❌ <b>Cita #{cita_id} CANCELADA por el cliente</b>")
-
         return jsonify({'mensaje': 'Cita cancelada exitosamente'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -803,7 +852,8 @@ def solicitar_modificacion():
     try:
         try:
             fecha_cita = datetime.strptime(f"{nueva_fecha} {nueva_hora}", "%Y-%m-%d %H:%M")
-            if fecha_cita < datetime.now():
+            fecha_cita = fecha_cita.replace(tzinfo=ZONA_HORARIA_VE)
+            if fecha_cita < ahora_ve():
                 return jsonify({'error': 'No se puede modificar a una fecha pasada'}), 400
         except ValueError:
             return jsonify({'error': 'Formato de fecha u hora inválido'}), 400

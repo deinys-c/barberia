@@ -164,7 +164,7 @@
         </div>
         <div class="header-actions">
             <button id="btnCliente" class="activo" onclick="cambiarVista('cliente')">Cliente</button>
-            <button id="btnBarbero" onclick="cambiarVista('barbero')">Barbero</button>
+            <button id="btnBarbero" onclick="cambiarVista('barbero')">Panel</button>
         </div>
     </header>
 
@@ -176,11 +176,11 @@
         <button onclick="cambiarTabCliente('estilos')">Estilos</button>
     </div>
 
-    <!-- ===== TABS BARBERO ===== -->
+    <!-- ===== TABS PANEL ===== -->
     <div id="tabsBarbero" class="tabs" style="display:none;">
         <button class="activo" onclick="cambiarTabBarbero('pendientes')">Pendientes</button>
         <button onclick="cambiarTabBarbero('historial')">Historial</button>
-        <button onclick="cambiarTabBarbero('barberos')">Barberos</button>
+        <button onclick="cambiarTabBarbero('barberos')" class="solo-admin" style="display:none;">Barberos</button>
         <button onclick="cambiarTabBarbero('configuracion')">Configuracion</button>
     </div>
 
@@ -262,29 +262,30 @@
     </div>
 
     <!-- ========================================= -->
-    <!-- ===== PANEL BARBERO ===== -->
+    <!-- ===== PANEL BARBERO / ADMIN ===== -->
     <!-- ========================================= -->
     <div id="panelBarbero" class="panel" style="display:none;">
 
         <!-- ----- LOGIN ----- -->
         <div id="barberoLogin" class="login-box">
             <h3>Acceso al Panel</h3>
-            <input type="password" id="passwordBarbero" placeholder="Contraseña" onkeydown="if(event.key==='Enter') loginBarbero()" maxlength="50">
-            <button class="btn" onclick="loginBarbero()">Ingresar</button>
+            <input type="text" id="usernameLogin" placeholder="Usuario" maxlength="50" autocomplete="username">
+            <input type="password" id="passwordLogin" placeholder="Contraseña" maxlength="50" autocomplete="current-password" onkeydown="if(event.key==='Enter') loginUsuario()">
+            <button class="btn" onclick="loginUsuario()">Ingresar</button>
             <div id="mensajeLogin" class="mensaje"></div>
         </div>
 
         <!-- ----- CONTENIDO ----- -->
         <div id="barberoContenido" style="display:none;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:10px;">
-                <h2>Panel de Control</h2>
+                <h2>Panel de Control <small id="infoUsuario" style="color: #8a7a6a;"></small></h2>
                 <button class="btn btn-secundario" onclick="logoutBarbero()">Cerrar sesion</button>
             </div>
 
             <!-- TAB: PENDIENTES -->
             <div id="tabPendientes" class="panel-tab activo">
                 <h3>Solicitudes Pendientes</h3>
-                <div class="filtros-container">
+                <div class="filtros-container" id="filtrosPendientes">
                     <div>
                         <label>Filtrar por barbero</label>
                         <select id="filtroBarberoPendientes" onchange="cargarPendientes()">
@@ -301,7 +302,7 @@
             <!-- TAB: HISTORIAL -->
             <div id="tabHistorial" class="panel-tab" style="display:none;">
                 <h3>Historial de Citas</h3>
-                <div class="filtros-container">
+                <div class="filtros-container" id="filtrosHistorial">
                     <div>
                         <label>Filtrar por barbero</label>
                         <select id="filtroBarberoHistorial" onchange="cargarHistorial()">
@@ -315,7 +316,7 @@
                 <div id="historialLista" style="margin-top:15px;"></div>
             </div>
 
-            <!-- TAB: BARBEROS -->
+            <!-- TAB: BARBEROS (solo admin) -->
             <div id="tabBarberos" class="panel-tab" style="display:none;">
                 <h3>Gestion de Barberos</h3>
                 <button class="btn" onclick="abrirFormBarbero()">+ Nuevo Barbero</button>
@@ -333,6 +334,10 @@
                     </div>
                     <label>Email</label>
                     <input type="email" id="barberoEmail" placeholder="barbero@ejemplo.com" maxlength="100">
+                    <label>Usuario de acceso</label>
+                    <input type="text" id="barberoUsername" placeholder="usuario_barbero" maxlength="50" autocomplete="off">
+                    <label>Contraseña</label>
+                    <input type="password" id="barberoPasswordNuevo" placeholder="Contraseña" maxlength="50" autocomplete="new-password">
                     <label>Dias de trabajo</label>
                     <div class="dias-container">
                         <label><input type="checkbox" class="dia-check" value="lunes" checked> Lunes</label>
@@ -356,7 +361,7 @@
                 <h3>Configuracion</h3>
                 <div style="background:rgba(255,255,255,0.03); padding:20px; border-radius:8px; margin-bottom:15px;">
                     <label>Bloquear dia</label>
-                    <div class="row">
+                    <div class="row" id="filaSelectorBloqueo">
                         <div>
                             <label>Barbero</label>
                             <select id="bloqueoBarbero">
@@ -392,7 +397,7 @@
 
     const API_URL = 'https://gochobarber.onrender.com';
     let horaSeleccionada = null;
-    let barberoPassword = '';
+    let currentUser = null;
 
     // ===== DATOS ESTATICOS =====
     const productos = [
@@ -414,15 +419,10 @@
 
     // ===== UTILIDADES =====
     function escaparHTML(texto) {
-        if (!texto) return '';
+        if (texto === null || texto === undefined) return '';
         const div = document.createElement('div');
         div.textContent = String(texto);
         return div.innerHTML;
-    }
-
-    function formatoFecha(fechaStr) {
-        if (!fechaStr) return '';
-        return String(fechaStr);
     }
 
     // ===== CARGAR PRODUCTOS Y ESTILOS =====
@@ -463,25 +463,123 @@
     // ===== AUTENTICACION =====
     function getAuthHeaders() {
         const headers = { 'Content-Type': 'application/json', 'Accept': 'application/json' };
-        if (barberoPassword) headers['X-Password'] = barberoPassword;
+        if (currentUser && currentUser.username) {
+            headers['X-Username'] = currentUser.username;
+        }
         return headers;
     }
 
-    function guardarSesion(password) {
-        barberoPassword = password;
-        try { localStorage.setItem('barberoPassword', password); } catch (e) { /* localStorage no disponible */ }
+    function guardarSesion(user) {
+        currentUser = user;
+        try { localStorage.setItem('currentUser', JSON.stringify(user)); } catch (e) {}
     }
 
     function cargarSesion() {
         try {
-            const guardada = localStorage.getItem('barberoPassword');
-            if (guardada) barberoPassword = guardada;
-        } catch (e) { /* localStorage no disponible */ }
+            const guardado = localStorage.getItem('currentUser');
+            if (guardado) currentUser = JSON.parse(guardado);
+        } catch (e) { currentUser = null; }
     }
 
     function cerrarSesion() {
-        barberoPassword = '';
-        try { localStorage.removeItem('barberoPassword'); } catch (e) { /* */ }
+        currentUser = null;
+        try { localStorage.removeItem('currentUser'); } catch (e) {}
+    }
+
+    function actualizarUISegunRol() {
+        const esAdmin = currentUser && currentUser.rol === 'admin';
+        
+        // Mostrar/ocultar pestaña de barberos
+        document.querySelectorAll('.solo-admin').forEach(el => {
+            el.style.display = esAdmin ? 'inline-block' : 'none';
+        });
+        
+        // Cambiar texto de configuracion
+        const tabConfig = document.querySelector('#tabsBarbero button:nth-child(4)');
+        if (tabConfig) {
+            tabConfig.textContent = esAdmin ? 'Configuracion' : 'Bloquear dias';
+        }
+        
+        // Filtros: solo admin puede filtrar por barbero
+        const filtrosP = document.getElementById('filtrosPendientes');
+        const filtrosH = document.getElementById('filtrosHistorial');
+        const filaSel = document.getElementById('filaSelectorBloqueo');
+        
+        if (esAdmin) {
+            if (filtrosP) filtrosP.style.display = 'flex';
+            if (filtrosH) filtrosH.style.display = 'flex';
+            if (filaSel) filaSel.style.display = 'flex';
+        } else {
+            // Ocultar solo el select de filtro, dejar boton actualizar
+            const selP = document.getElementById('filtroBarberoPendientes');
+            const selH = document.getElementById('filtroBarberoHistorial');
+            if (selP) selP.parentElement.style.display = 'none';
+            if (selH) selH.parentElement.style.display = 'none';
+            if (filaSel) filaSel.style.display = 'none';
+        }
+        
+        // Info de usuario
+        const infoUser = document.getElementById('infoUsuario');
+        if (infoUser && currentUser) {
+            infoUser.textContent = `(${currentUser.username} - ${currentUser.rol})`;
+        }
+    }
+
+    async function loginUsuario() {
+        const username = document.getElementById('usernameLogin').value.trim();
+        const password = document.getElementById('passwordLogin').value;
+        if (!username || !password) { alert('Ingresa usuario y contraseña'); return; }
+        const msg = document.getElementById('mensajeLogin');
+        msg.className = 'mensaje info';
+        msg.textContent = 'Verificando...';
+        msg.style.display = 'block';
+        try {
+            const res = await fetch(`${API_URL}/api/login`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, password })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                guardarSesion({ username: data.username, rol: data.rol, barbero_id: data.barbero_id });
+                document.getElementById('barberoLogin').style.display = 'none';
+                document.getElementById('barberoContenido').style.display = 'block';
+                document.getElementById('usernameLogin').value = '';
+                document.getElementById('passwordLogin').value = '';
+                msg.style.display = 'none';
+                actualizarUISegunRol();
+                cargarBarberosSelectorAdmin();
+                cargarPendientes();
+            } else {
+                msg.className = 'mensaje error';
+                msg.textContent = data.error || 'Error de login';
+            }
+        } catch (error) {
+            console.error('Error en login:', error);
+            msg.className = 'mensaje error';
+            msg.textContent = 'Error al conectar con el servidor.';
+        }
+    }
+
+    function verificarSesion() {
+        const login = document.getElementById('barberoLogin');
+        const contenido = document.getElementById('barberoContenido');
+        if (currentUser && currentUser.username) {
+            login.style.display = 'none';
+            contenido.style.display = 'block';
+            actualizarUISegunRol();
+            cargarBarberosSelectorAdmin();
+            cargarPendientes();
+        } else {
+            login.style.display = 'block';
+            contenido.style.display = 'none';
+        }
+    }
+
+    function logoutBarbero() {
+        cerrarSesion();
+        document.getElementById('barberoLogin').style.display = 'block';
+        document.getElementById('barberoContenido').style.display = 'none';
     }
 
     // ===== CAMBIAR VISTA =====
@@ -533,7 +631,7 @@
         }
     }
 
-    // ===== TABS BARBERO =====
+    // ===== TABS PANEL =====
     function cambiarTabBarbero(tab) {
         document.querySelectorAll('#tabsBarbero button').forEach(b => b.classList.remove('activo'));
         document.querySelectorAll('#barberoContenido .panel-tab').forEach(p => p.style.display = 'none');
@@ -547,6 +645,10 @@
             document.getElementById('tabHistorial').style.display = 'block';
             cargarHistorial();
         } else if (tab === 'barberos') {
+            if (!currentUser || currentUser.rol !== 'admin') {
+                alert('Solo el administrador puede gestionar barberos');
+                return;
+            }
             botones[2].classList.add('activo');
             document.getElementById('tabBarberos').style.display = 'block';
             cargarBarberos();
@@ -606,7 +708,6 @@
         if (!horaSeleccionada) { alert('Selecciona una hora'); return; }
         if (!fecha) { alert('Selecciona una fecha'); return; }
 
-        // Validar que la fecha no sea pasada
         try {
             const [year, month, day] = fecha.split('-').map(Number);
             const [hora, minuto] = horaSeleccionada.split(':').map(Number);
@@ -683,7 +784,7 @@
                 const barberoInfo = c.barbero ? `<div class="barbero-info">Barbero: ${escaparHTML(c.barbero)}</div>` : '';
                 div.innerHTML = `
                     <div class="info">
-                        <div class="fecha-hora">${formatoFecha(c.fecha)} - ${escaparHTML(c.hora_inicio)} ${alerta}</div>
+                        <div class="fecha-hora">${escaparHTML(c.fecha)} - ${escaparHTML(c.hora_inicio)} ${alerta}</div>
                         <div class="servicio">${escaparHTML(c.servicio)}</div>
                         ${barberoInfo}
                     </div>
@@ -738,59 +839,6 @@
         }
     }
 
-    // ===== LOGIN BARBERO =====
-    async function loginBarbero() {
-        const password = document.getElementById('passwordBarbero').value;
-        if (!password) { alert('Ingresa la contraseña'); return; }
-        const msg = document.getElementById('mensajeLogin');
-        msg.className = 'mensaje info';
-        msg.textContent = 'Verificando...';
-        msg.style.display = 'block';
-        try {
-            const res = await fetch(`${API_URL}/api/panel/login`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ password })
-            });
-            const data = await res.json();
-            if (res.ok) {
-                guardarSesion(password);
-                document.getElementById('barberoLogin').style.display = 'none';
-                document.getElementById('barberoContenido').style.display = 'block';
-                cargarBarberosSelectorAdmin();
-                cargarPendientes();
-            } else {
-                msg.className = 'mensaje error';
-                msg.textContent = data.error || 'Error de login';
-            }
-        } catch (error) {
-            console.error('Error en login:', error);
-            msg.className = 'mensaje error';
-            msg.textContent = 'Error al conectar con el servidor.';
-        }
-    }
-
-    function verificarSesion() {
-        const login = document.getElementById('barberoLogin');
-        const contenido = document.getElementById('barberoContenido');
-        if (barberoPassword) {
-            login.style.display = 'none';
-            contenido.style.display = 'block';
-            cargarBarberosSelectorAdmin();
-            cargarPendientes();
-        } else {
-            login.style.display = 'block';
-            contenido.style.display = 'none';
-        }
-    }
-
-    function logoutBarbero() {
-        cerrarSesion();
-        document.getElementById('barberoLogin').style.display = 'block';
-        document.getElementById('barberoContenido').style.display = 'none';
-        document.getElementById('passwordBarbero').value = '';
-    }
-
     // ===== PENDIENTES =====
     async function cargarPendientes() {
         const cont = document.getElementById('pendientesLista');
@@ -819,7 +867,7 @@
                 const alerta = c.alerta_cierre ? '<span class="alerta-cierre">Extiende horario</span>' : '';
                 div.innerHTML = `
                     <div class="info">
-                        <div class="fecha-hora">${formatoFecha(c.fecha)} - ${escaparHTML(c.hora_inicio)} ${alerta}</div>
+                        <div class="fecha-hora">${escaparHTML(c.fecha)} - ${escaparHTML(c.hora_inicio)} ${alerta}</div>
                         <div class="servicio">${escaparHTML(c.servicio)} (${escaparHTML(c.tipo_reserva)})</div>
                         <div class="cliente">Cliente: ${escaparHTML(c.cliente)} - ${escaparHTML(c.telefono || 'N/A')}</div>
                         <div class="barbero-info">Barbero: ${escaparHTML(c.barbero || 'N/A')}</div>
@@ -914,7 +962,7 @@
                 }
                 div.innerHTML = `
                     <div class="info">
-                        <div class="fecha-hora">${formatoFecha(c.fecha)} - ${escaparHTML(c.hora_inicio)}</div>
+                        <div class="fecha-hora">${escaparHTML(c.fecha)} - ${escaparHTML(c.hora_inicio)}</div>
                         <div class="servicio">${escaparHTML(c.servicio)} - ${escaparHTML(c.cliente)}</div>
                         <div class="barbero-info">Barbero: ${escaparHTML(c.barbero || 'N/A')}</div>
                     </div>
@@ -946,13 +994,15 @@
         }
     }
 
-    // ===== GESTION BARBEROS =====
+    // ===== GESTION BARBEROS (SOLO ADMIN) =====
     function abrirFormBarbero() {
         document.getElementById('formBarbero').style.display = 'block';
         document.getElementById('barberoEditId').value = '';
         document.getElementById('barberoNombre').value = '';
         document.getElementById('barberoTelefono').value = '';
         document.getElementById('barberoEmail').value = '';
+        document.getElementById('barberoUsername').value = '';
+        document.getElementById('barberoPasswordNuevo').value = '';
         document.querySelectorAll('.dia-check').forEach(c => c.checked = true);
         const msg = document.getElementById('mensajeBarbero');
         msg.style.display = 'none';
@@ -969,11 +1019,14 @@
         if (nombre.length < 2) { alert('El nombre debe tener al menos 2 caracteres'); return; }
         const dias = Array.from(document.querySelectorAll('.dia-check:checked')).map(c => c.value);
         if (dias.length === 0) { alert('Selecciona al menos un dia de trabajo'); return; }
+        
         const body = {
             nombre,
             telefono: document.getElementById('barberoTelefono').value.trim(),
             email: document.getElementById('barberoEmail').value.trim(),
-            dias_trabajo: dias
+            dias_trabajo: dias,
+            username: document.getElementById('barberoUsername').value.trim(),
+            password: document.getElementById('barberoPasswordNuevo').value
         };
         const url = id ? `${API_URL}/api/admin/barberos/${id}` : `${API_URL}/api/admin/barberos`;
         const method = id ? 'PUT' : 'POST';
@@ -1050,6 +1103,8 @@
             document.getElementById('barberoNombre').value = b.nombre || '';
             document.getElementById('barberoTelefono').value = b.telefono || '';
             document.getElementById('barberoEmail').value = b.email || '';
+            document.getElementById('barberoUsername').value = '';
+            document.getElementById('barberoPasswordNuevo').value = '';
             let dias = [];
             try { dias = JSON.parse(b.dias_trabajo); } catch (e) { dias = []; }
             document.querySelectorAll('.dia-check').forEach(c => c.checked = dias.includes(c.value));
@@ -1062,7 +1117,7 @@
     }
 
     async function desactivarBarbero(id) {
-        if (!confirm('¿Desactivar este barbero?')) return;
+        if (!confirm('¿Desactivar este barbero? Se cancelarán sus citas futuras.')) return;
         try {
             const res = await fetch(`${API_URL}/api/admin/barberos/${id}`, {
                 method: 'DELETE',
@@ -1112,29 +1167,31 @@
             const filtroHist = document.getElementById('filtroBarberoHistorial');
             const bloqueoBarbero = document.getElementById('bloqueoBarbero');
 
-            [filtroPend, filtroHist].forEach(sel => {
-                if (!sel) return;
-                const val = sel.value;
-                sel.innerHTML = '<option value="0">Todos los barberos</option>';
-                activos.forEach(b => {
-                    const opt = document.createElement('option');
-                    opt.value = b.id;
-                    opt.textContent = b.nombre;
-                    sel.appendChild(opt);
+            if (currentUser && currentUser.rol === 'admin') {
+                [filtroPend, filtroHist].forEach(sel => {
+                    if (!sel) return;
+                    const val = sel.value;
+                    sel.innerHTML = '<option value="0">Todos los barberos</option>';
+                    activos.forEach(b => {
+                        const opt = document.createElement('option');
+                        opt.value = b.id;
+                        opt.textContent = b.nombre;
+                        sel.appendChild(opt);
+                    });
+                    if (val) sel.value = val;
                 });
-                if (val) sel.value = val;
-            });
 
-            if (bloqueoBarbero) {
-                const val = bloqueoBarbero.value;
-                bloqueoBarbero.innerHTML = '';
-                activos.forEach(b => {
-                    const opt = document.createElement('option');
-                    opt.value = b.id;
-                    opt.textContent = b.nombre;
-                    bloqueoBarbero.appendChild(opt);
-                });
-                if (val) bloqueoBarbero.value = val;
+                if (bloqueoBarbero) {
+                    const val = bloqueoBarbero.value;
+                    bloqueoBarbero.innerHTML = '';
+                    activos.forEach(b => {
+                        const opt = document.createElement('option');
+                        opt.value = b.id;
+                        opt.textContent = b.nombre;
+                        bloqueoBarbero.appendChild(opt);
+                    });
+                    if (val) bloqueoBarbero.value = val;
+                }
             }
         } catch (error) {
             console.error('Error cargando selectores admin:', error);
@@ -1146,7 +1203,7 @@
         const inicio = document.getElementById('bloqueoInicio').value;
         const fin = document.getElementById('bloqueoFin').value;
         const motivo = document.getElementById('bloqueoMotivo').value.trim() || 'Descanso';
-        const barberoId = parseInt(document.getElementById('bloqueoBarbero').value) || 1;
+        const barberoId = parseInt(document.getElementById('bloqueoBarbero')?.value) || 1;
         if (!inicio || !fin) { alert('Selecciona las fechas'); return; }
         if (fin < inicio) { alert('La fecha fin no puede ser anterior a la fecha inicio'); return; }
 
@@ -1193,10 +1250,8 @@
 
     // ===== INICIALIZACION =====
     document.addEventListener('DOMContentLoaded', function() {
-        // Cargar sesion guardada
         cargarSesion();
 
-        // Fechas por defecto
         try {
             const fecha = new Date();
             fecha.setDate(fecha.getDate() + 1);
@@ -1225,11 +1280,10 @@
             console.error('Error inicializando fechas:', e);
         }
 
-        // Cargar barberos en el selector de cliente
         cargarBarberosSelectorCliente();
     });
 
-    // Exponer funciones al ámbito global (para onclick)
+    // Exponer funciones al ambito global
     window.cambiarVista = cambiarVista;
     window.cambiarTabCliente = cambiarTabCliente;
     window.cambiarTabBarbero = cambiarTabBarbero;
@@ -1238,7 +1292,7 @@
     window.consultarCitas = consultarCitas;
     window.cancelarCita = cancelarCita;
     window.solicitarModificacion = solicitarModificacion;
-    window.loginBarbero = loginBarbero;
+    window.loginUsuario = loginUsuario;
     window.logoutBarbero = logoutBarbero;
     window.cargarPendientes = cargarPendientes;
     window.confirmarCita = confirmarCita;
