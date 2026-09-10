@@ -549,7 +549,6 @@ def actualizar_barbero(barbero_id):
 
 @app.route('/api/admin/barberos/<int:barbero_id>', methods=['DELETE'])
 def eliminar_barbero(barbero_id):
-    """Desactiva un barbero (soft delete)."""
     user, error, code = requiere_admin()
     if error: return error, code
     try:
@@ -585,7 +584,6 @@ def eliminar_barbero(barbero_id):
 
 @app.route('/api/admin/barberos/<int:barbero_id>/permanente', methods=['DELETE'])
 def eliminar_barbero_permanente(barbero_id):
-    """Elimina un barbero permanentemente."""
     user, error, code = requiere_admin()
     if error: return error, code
     try:
@@ -1067,6 +1065,54 @@ def solicitar_modificacion():
         return jsonify({'mensaje': 'Solicitud enviada', 'nueva_cita_id': nueva_cita_id})
     except Exception as e:
         logging.error(f"Error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+# ========== LIMPIEZA (TEMPORAL) ==========
+
+@app.route('/api/admin/reset-db', methods=['POST'])
+def reset_db():
+    """⚠️ TEMPORAL: Limpia toda la BD y recrea datos por defecto."""
+    data = request.json or {}
+    token = data.get('token', '')
+    if token != 'reset2026':
+        return jsonify({'error': 'Token inválido'}), 403
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        
+        # Borrar en orden por FK
+        cursor.execute('DELETE FROM logs_notificaciones')
+        cursor.execute('DELETE FROM citas')
+        cursor.execute('DELETE FROM bloqueos')
+        cursor.execute('DELETE FROM usuarios')
+        cursor.execute('DELETE FROM clientes')
+        cursor.execute('DELETE FROM catalogo')
+        cursor.execute('DELETE FROM servicios')
+        cursor.execute('DELETE FROM barberos')
+        conn.commit()
+        conn.close()
+        
+        # Reiniciar secuencias (PostgreSQL)
+        try:
+            conn2 = get_db()
+            cur2 = conn2.cursor()
+            for tabla in ['logs_notificaciones', 'citas', 'bloqueos', 'usuarios',
+                          'clientes', 'catalogo', 'servicios', 'barberos']:
+                try:
+                    cur2.execute(f"ALTER SEQUENCE {tabla}_id_seq RESTART WITH 1")
+                except Exception:
+                    pass
+            conn2.commit()
+            conn2.close()
+        except Exception as seq_error:
+            logging.warning(f"No se pudieron reiniciar secuencias: {seq_error}")
+        
+        # Recrear datos por defecto
+        init_db()
+        
+        return jsonify({'mensaje': '✅ Base de datos reiniciada correctamente'})
+    except Exception as e:
+        logging.error(f"Error reset: {e}")
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
