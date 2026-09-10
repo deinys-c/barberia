@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 from flask import Flask, request, jsonify, session
 from flask_cors import CORS
 from database import get_db, init_db
+import requests
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'dev-key-123')
@@ -21,6 +22,10 @@ logging.basicConfig(
 SIMULAR_FALLO_NOTIFICACION = os.environ.get('SIMULAR_FALLO', 'False').lower() == 'true'
 TIEMPO_ESPERA_FALLO_MIN = int(os.environ.get('TIEMPO_ESPERA', '20'))
 BARBERO_PASSWORD = os.environ.get('BARBERO_PASSWORD', 'barberia2026')
+
+# ===== CONFIGURACIÓN TELEGRAM =====
+TELEGRAM_TOKEN = os.environ.get('TELEGRAM_TOKEN', '')
+TELEGRAM_CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID', '')
 
 init_db()
 
@@ -50,6 +55,38 @@ def actualizar_citas_pasadas():
         conn.close()
     except Exception as e:
         logging.error(f"Error actualizando citas pasadas: {e}")
+
+def enviar_telegram(mensaje, chat_id=None):
+    """
+    Envía un mensaje por Telegram.
+    Si no se especifica chat_id, usa el configurado por defecto.
+    """
+    if not TELEGRAM_TOKEN:
+        logging.warning("Telegram no configurado: falta TELEGRAM_TOKEN")
+        return False
+    
+    destinatario = chat_id or TELEGRAM_CHAT_ID
+    if not destinatario:
+        logging.warning("Telegram no configurado: falta TELEGRAM_CHAT_ID")
+        return False
+    
+    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+    data = {
+        "chat_id": str(destinatario),
+        "text": mensaje,
+        "parse_mode": "HTML"
+    }
+    
+    try:
+        response = requests.post(url, json=data, timeout=10)
+        response.raise_for_status()
+        logging.info(f"Telegram enviado a {destinatario}")
+        return True
+    except Exception as e:
+        logging.error(f"Error enviando Telegram: {e}")
+        if hasattr(e, 'response') and e.response:
+            logging.error(f"Respuesta: {e.response.text}")
+        return False
 
 def calcular_huecos_libres(fecha_str, barbero_id=0):
     """
@@ -83,7 +120,6 @@ def calcular_huecos_libres(fecha_str, barbero_id=0):
             hora_actual += timedelta(minutes=30)
 
     if barbero_id > 0:
-        # Barbero específico
         cursor.execute('SELECT dias_trabajo FROM barberos WHERE id = %s AND activo = 1', (barbero_id,))
         barbero = cursor.fetchone()
         if not barbero:
@@ -98,7 +134,6 @@ def calcular_huecos_libres(fecha_str, barbero_id=0):
             conn.close()
             return []
         
-        # Verificar bloqueos
         cursor.execute('''
             SELECT 1 FROM bloqueos 
             WHERE barbero_id = %s AND activo = 1 
@@ -116,7 +151,6 @@ def calcular_huecos_libres(fecha_str, barbero_id=0):
         ocupados = {row['hora_inicio'] for row in cursor.fetchall()}
         disponibles = [h for h in todas_las_horas if h not in ocupados]
     else:
-        # Cualquier barbero disponible
         cursor.execute('SELECT id, dias_trabajo FROM barberos WHERE activo = 1')
         barberos = cursor.fetchall()
         if not barberos:
@@ -133,7 +167,6 @@ def calcular_huecos_libres(fecha_str, barbero_id=0):
             if dia_actual not in dias:
                 continue
             
-            # Verificar si el barbero está bloqueado ese día
             cursor.execute('''
                 SELECT 1 FROM bloqueos 
                 WHERE barbero_id = %s AND activo = 1 
@@ -223,13 +256,14 @@ def reservar():
         conn = get_db()
         cursor = conn.cursor()
 
-        cursor.execute('SELECT duracion_minutos FROM servicios WHERE id = %s AND activo = 1', (servicio_id,))
+        cursor.execute('SELECT duracion_minutos, nombre as servicio_nombre FROM servicios WHERE id = %s AND activo = 1', (servicio_id,))
         servicio = cursor.fetchone()
         if not servicio:
             conn.close()
             return jsonify({'error': 'Servicio no válido'}), 400
 
         duracion = servicio['duracion_minutos']
+        servicio_nombre = servicio['servicio_nombre']
         h, m = map(int, hora_inicio.split(':'))
         total_min = h * 60 + m + duracion
         hora_fin = f"{total_min // 60:02d}:{total_min % 60:02d}"
@@ -242,10 +276,11 @@ def reservar():
 
         # Asignar barbero si es 0 (cualquiera disponible)
         if barbero_id == 0:
-            cursor.execute('SELECT id, dias_trabajo FROM barberos WHERE activo = 1')
+            cursor.execute('SELECT id, nombre, dias_trabajo FROM barberos WHERE activo = 1')
             barberos = cursor.fetchall()
             fecha_obj = datetime.strptime(fecha, '%Y-%m-%d')
             dia_actual = DIAS_ES[fecha_obj.weekday()]
+            barbero_nombre = "Por asignar"
             for b in barberos:
                 try:
                     dias = json.loads(b['dias_trabajo'])
@@ -253,7 +288,6 @@ def reservar():
                     dias = DIAS_ES[:6]
                 if dia_actual not in dias:
                     continue
-                # Verificar bloqueos
                 cursor.execute('''
                     SELECT 1 FROM bloqueos 
                     WHERE barbero_id = %s AND activo = 1 
@@ -268,16 +302,18 @@ def reservar():
                 ''', (b['id'], fecha, hora_inicio))
                 if not cursor.fetchone():
                     barbero_id = b['id']
+                    barbero_nombre = b['nombre']
                     break
             if barbero_id == 0:
                 conn.close()
                 return jsonify({'error': 'No hay barberos disponibles en ese horario'}), 409
         else:
-            cursor.execute('SELECT dias_trabajo FROM barberos WHERE id = %s AND activo = 1', (barbero_id,))
+            cursor.execute('SELECT dias_trabajo, nombre FROM barberos WHERE id = %s AND activo = 1', (barbero_id,))
             b = cursor.fetchone()
             if not b:
                 conn.close()
                 return jsonify({'error': 'Barbero no válido'}), 400
+            barbero_nombre = b['nombre']
             fecha_obj = datetime.strptime(fecha, '%Y-%m-%d')
             dia_actual = DIAS_ES[fecha_obj.weekday()]
             try:
@@ -287,7 +323,6 @@ def reservar():
             if dia_actual not in dias:
                 conn.close()
                 return jsonify({'error': 'El barbero no trabaja ese día'}), 400
-            # Verificar bloqueos
             cursor.execute('''
                 SELECT 1 FROM bloqueos 
                 WHERE barbero_id = %s AND activo = 1 
@@ -329,6 +364,24 @@ def reservar():
         cita_id = cursor.fetchone()['id']
         conn.commit()
         conn.close()
+
+        # ===== NOTIFICACIÓN POR TELEGRAM =====
+        try:
+            emoji_estado = "⚠️ URGENTE - Requiere confirmación" if tipo_reserva == 'urgente' else "✅ Confirmada automáticamente"
+            mensaje = (
+                f"🔔 <b>NUEVA CITA #{cita_id}</b>\n\n"
+                f"👤 Cliente: <b>{nombre}</b>\n"
+                f"📱 Teléfono: {telefono or 'No proporcionado'}\n"
+                f"✂️ Servicio: <b>{servicio_nombre}</b>\n"
+                f"📅 Fecha: <b>{fecha}</b>\n"
+                f"⏰ Hora: <b>{hora_inicio}</b>\n"
+                f"💈 Barbero: <b>{barbero_nombre}</b>\n"
+                f"📝 Notas: {notas or 'Sin notas'}\n\n"
+                f"{emoji_estado}"
+            )
+            enviar_telegram(mensaje)
+        except Exception as e:
+            logging.error(f"Error notificando cita por Telegram: {e}")
 
         if tipo_reserva == 'urgente':
             logging.info(f"CITA {cita_id} - Reserva urgente: {nombre} - {fecha} {hora_inicio}")
@@ -386,6 +439,9 @@ def crear_barbero():
         nuevo_id = cursor.fetchone()['id']
         conn.commit()
         conn.close()
+
+        enviar_telegram(f"👨‍🦱 <b>Nuevo barbero creado</b>\nNombre: {data['nombre']}")
+
         return jsonify({'mensaje': 'Barbero creado exitosamente', 'id': nuevo_id})
     except Exception as e:
         logging.error(f"Error creando barbero: {e}")
@@ -440,7 +496,6 @@ def eliminar_barbero(barbero_id):
         
         cursor.execute('UPDATE barberos SET activo = 0 WHERE id = %s', (barbero_id,))
         
-        # Cancelar citas futuras del barbero
         hoy = datetime.now().strftime('%Y-%m-%d')
         cursor.execute('''
             UPDATE citas SET estado = 'cancelada_por_barbero'
@@ -451,6 +506,9 @@ def eliminar_barbero(barbero_id):
         
         conn.commit()
         conn.close()
+
+        enviar_telegram(f"🚫 <b>Barbero desactivado</b>\nNombre: {barbero['nombre']}\nCitas canceladas: {canceladas}")
+
         return jsonify({
             'mensaje': f'Barbero "{barbero["nombre"]}" desactivado. {canceladas} citas canceladas.',
             'citas_canceladas': canceladas
@@ -548,6 +606,9 @@ def confirmar_cita():
             cursor.execute("UPDATE citas SET estado = 'cancelada_por_barbero' WHERE id = %s", (cita['cita_original_id'],))
         conn.commit()
         conn.close()
+
+        enviar_telegram(f"✅ <b>Cita #{cita_id} CONFIRMADA</b> desde el panel.")
+
         return jsonify({'mensaje': 'Cita confirmada exitosamente'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -574,6 +635,9 @@ def rechazar_cita():
         cursor.execute("UPDATE citas SET estado = 'cancelada_por_barbero' WHERE id = %s", (cita_id,))
         conn.commit()
         conn.close()
+
+        enviar_telegram(f"❌ <b>Cita #{cita_id} RECHAZADA</b> desde el panel.")
+
         return jsonify({'mensaje': 'Cita rechazada'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -603,6 +667,9 @@ def cancelar_cita_confirmada():
         cursor.execute("UPDATE citas SET estado = 'cancelada_por_barbero' WHERE id = %s", (cita_id,))
         conn.commit()
         conn.close()
+
+        enviar_telegram(f"🚫 <b>Cita #{cita_id} CANCELADA</b> desde el panel.")
+
         return jsonify({'mensaje': 'Cita cancelada exitosamente'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -636,6 +703,9 @@ def bloquear_dias():
         ''', (barbero_id, fecha_inicio, fecha_fin, motivo))
         conn.commit()
         conn.close()
+
+        enviar_telegram(f"📅 <b>Días bloqueados</b>\nDesde: {fecha_inicio}\nHasta: {fecha_fin}\nMotivo: {motivo}")
+
         return jsonify({'mensaje': 'Bloqueo agregado correctamente'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -656,6 +726,9 @@ def cancelar_masivo():
         afectadas = cursor.rowcount
         conn.commit()
         conn.close()
+
+        enviar_telegram(f"🚫 <b>{afectadas} citas canceladas</b> por bloqueo del barbero.")
+
         return jsonify({'mensaje': f'{afectadas} citas canceladas'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -712,6 +785,9 @@ def cancelar_cita_cliente():
         cursor.execute("UPDATE citas SET estado = 'cancelada_por_cliente' WHERE id = %s", (cita_id,))
         conn.commit()
         conn.close()
+
+        enviar_telegram(f"❌ <b>Cita #{cita_id} CANCELADA por el cliente</b>")
+
         return jsonify({'mensaje': 'Cita cancelada exitosamente'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -768,6 +844,15 @@ def solicitar_modificacion():
         nueva_cita_id = cursor.fetchone()['id']
         conn.commit()
         conn.close()
+
+        enviar_telegram(
+            f"🔄 <b>SOLICITUD DE MODIFICACIÓN</b>\n\n"
+            f"Cita original: #{cita_original_id}\n"
+            f"Nueva fecha: {nueva_fecha}\n"
+            f"Nueva hora: {nueva_hora}\n\n"
+            f"Requiere confirmación del barbero."
+        )
+
         return jsonify({'mensaje': 'Solicitud de modificación enviada. Espera confirmación del barbero.',
                         'nueva_cita_id': nueva_cita_id})
     except Exception as e:
