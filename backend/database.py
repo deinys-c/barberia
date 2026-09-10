@@ -1,29 +1,15 @@
 import os
 import json
+import unicodedata
 import psycopg2
 import psycopg2.extras
 import sqlite3
 from werkzeug.security import generate_password_hash
-import unicodedata
 
-def normalizar_username(nombre):
-    """Convierte un nombre en un username válido: minúsculas, sin acentos, sin espacios."""
-    if not nombre:
-        return 'barbero'
-    # Quitar acentos
-    nfkd = unicodedata.normalize('NFKD', nombre)
-    solo_ascii = nfkd.encode('ASCII', 'ignore').decode('ASCII')
-    # Minúsculas, solo letras y números
-    username = ''.join(c for c in solo_ascii.lower() if c.isalnum())
-    if not username:
-        username = 'barbero'
-    return username
-    
 DATABASE_URL = os.getenv('DATABASE_URL')
 USING_POSTGRES = DATABASE_URL is not None and DATABASE_URL.startswith('postgres')
 
 def get_db():
-    """Devuelve una conexión a la base de datos (PostgreSQL en producción, SQLite local)."""
     if USING_POSTGRES:
         conn = psycopg2.connect(DATABASE_URL)
         conn.cursor_factory = psycopg2.extras.RealDictCursor
@@ -34,8 +20,18 @@ def get_db():
         conn.row_factory = sqlite3.Row
         return conn
 
+def normalizar_username(nombre):
+    """Convierte un nombre en un username válido: minúsculas, sin acentos, sin espacios."""
+    if not nombre:
+        return 'barbero'
+    nfkd = unicodedata.normalize('NFKD', nombre)
+    solo_ascii = nfkd.encode('ASCII', 'ignore').decode('ASCII')
+    username = ''.join(c for c in solo_ascii.lower() if c.isalnum())
+    if not username:
+        username = 'barbero'
+    return username
+
 def init_db():
-    """Crea las tablas, índices, y usuarios por defecto."""
     conn = get_db()
     cursor = conn.cursor()
     is_postgres = USING_POSTGRES
@@ -100,7 +96,6 @@ def init_db():
         )
     ''')
 
-    # ===== ÍNDICES =====
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_citas_fecha ON citas(fecha)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_citas_estado ON citas(estado)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_citas_barbero ON citas(barbero_id)')
@@ -119,7 +114,7 @@ def init_db():
         )
     ''')
 
-    # ===== TABLA LOGS NOTIFICACIONES =====
+    # ===== TABLA LOGS =====
     cursor.execute(f'''
         CREATE TABLE IF NOT EXISTS logs_notificaciones (
             id {id_def},
@@ -145,7 +140,22 @@ def init_db():
         )
     ''')
 
-    # ===== DATOS DE PRUEBA (BARBERO PRINCIPAL Y SERVICIOS) =====
+    # ===== TABLA CATALOGO =====
+    cursor.execute(f'''
+        CREATE TABLE IF NOT EXISTS catalogo (
+            id {id_def},
+            tipo TEXT NOT NULL,
+            archivo TEXT NOT NULL,
+            nombre TEXT NOT NULL,
+            descripcion TEXT,
+            precio TEXT,
+            orden INTEGER DEFAULT 0,
+            activo INTEGER DEFAULT 1,
+            fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+
+    # ===== DATOS DE PRUEBA =====
     if is_postgres:
         cursor.execute("SELECT 1 FROM barberos LIMIT 1")
         existe = cursor.fetchone()
@@ -154,18 +164,18 @@ def init_db():
         existe = cursor.fetchone()['cnt'] > 0
 
     if not existe:
-        cursor.execute('''
-            INSERT INTO barberos (nombre, telefono, email) 
-            VALUES ('Barbero Principal', '123456789', 'barbero@barberia.com')
-            RETURNING id
-        ''') if is_postgres else cursor.execute('''
-            INSERT INTO barberos (nombre, telefono, email) 
-            VALUES ('Barbero Principal', '123456789', 'barbero@barberia.com')
-        ''')
-        
         if is_postgres:
+            cursor.execute('''
+                INSERT INTO barberos (nombre, telefono, email) 
+                VALUES ('Barbero Principal', '123456789', 'barbero@barberia.com')
+                RETURNING id
+            ''')
             barbero_id = cursor.fetchone()['id']
         else:
+            cursor.execute('''
+                INSERT INTO barberos (nombre, telefono, email) 
+                VALUES ('Barbero Principal', '123456789', 'barbero@barberia.com')
+            ''')
             barbero_id = cursor.lastrowid
         
         cursor.execute('''
@@ -174,23 +184,25 @@ def init_db():
             ('Barba', 30, 15000),
             ('Combo (Corte + Barba)', 75, 30000)
         ''')
-        print("✅ Datos de prueba insertados (1 barbero, 3 servicios)")
+        print("✅ Datos de prueba insertados")
 
-    # ===== CREAR USUARIO ADMIN SI NO EXISTE =====
+    # ===== ADMIN USER =====
     cursor.execute("SELECT 1 FROM usuarios WHERE username = 'admin'")
-    admin_existe = cursor.fetchone()
-    if not admin_existe:
+    if not cursor.fetchone():
         admin_hash = generate_password_hash('barberia2026')
-        cursor.execute('''
-            INSERT INTO usuarios (username, password_hash, rol, barbero_id)
-            VALUES ('admin', %s, 'admin', NULL)
-        ''' if is_postgres else '''
-            INSERT INTO usuarios (username, password_hash, rol, barbero_id)
-            VALUES ('admin', ?, 'admin', NULL)
-        ''', (admin_hash,))
-        print("✅ Usuario admin creado: admin / barberia2026")
+        if is_postgres:
+            cursor.execute('''
+                INSERT INTO usuarios (username, password_hash, rol, barbero_id)
+                VALUES ('admin', %s, 'admin', NULL)
+            ''', (admin_hash,))
+        else:
+            cursor.execute('''
+                INSERT INTO usuarios (username, password_hash, rol, barbero_id)
+                VALUES ('admin', ?, 'admin', NULL)
+            ''', (admin_hash,))
+        print("✅ Admin: admin / barberia2026")
 
-    # ===== CREAR USUARIOS PARA BARBEROS EXISTENTES QUE NO TENGAN =====
+    # ===== USUARIOS PARA BARBEROS =====
     cursor.execute('SELECT id, nombre FROM barberos WHERE activo = 1')
     barberos = cursor.fetchall()
     
@@ -202,11 +214,7 @@ def init_db():
         if cursor.fetchone():
             continue
         
-        # Generar username y password
         username = normalizar_username(nombre)
-        password = f"{username}123"
-        
-        # Verificar colisión y agregar número
         base_username = username
         contador = 2
         while True:
@@ -216,12 +224,36 @@ def init_db():
             username = f"{base_username}{contador}"
             contador += 1
         
+        password = f"{username}123"
         pwd_hash = generate_password_hash(password)
         cursor.execute('''
             INSERT INTO usuarios (username, password_hash, rol, barbero_id)
             VALUES (%s, %s, 'barbero', %s)
         ''', (username, pwd_hash, barbero_id))
-        print(f"✅ Usuario creado: {username} / {password}")
+        print(f"✅ Usuario: {username} / {password}")
+
+    # ===== CATALOGO POR DEFECTO =====
+    cursor.execute('SELECT COUNT(*) as cnt FROM catalogo')
+    if cursor.fetchone()['cnt'] == 0:
+        items = [
+            ('producto', 'cera.jpg', 'Cera Modeladora', 'Fijacion media, acabado mate', '$35.000 COP', 1),
+            ('producto', 'bruma.jpg', 'Bruma Capilar', 'Hidratacion y brillo natural', '$28.000 COP', 2),
+            ('producto', 'aceite.jpg', 'Aceite de Barba', 'Suaviza y nutre la barba', '$32.000 COP', 3),
+            ('producto', 'shampoo.jpg', 'Shampoo Solido', 'Limpieza profunda sin quimicos', '$25.000 COP', 4),
+            ('producto', 'pomada.jpg', 'Pomada Clasica', 'Fijacion fuerte, brillo intenso', '$30.000 COP', 5),
+            ('estilo', 'clasico.jpg', 'Corte Clasico', '', '', 1),
+            ('estilo', 'fade.jpg', 'Fade Moderno', '', '', 2),
+            ('estilo', 'militar.jpg', 'Corte Militar', '', '', 3),
+            ('estilo', 'pompadour.jpg', 'Pompadour', '', '', 4),
+            ('estilo', 'texturizado.jpg', 'Corte Texturizado', '', '', 5),
+            ('estilo', 'barba.jpg', 'Barba Perfilada', '', '', 6)
+        ]
+        for tipo, archivo, nombre, descripcion, precio, orden in items:
+            cursor.execute('''
+                INSERT INTO catalogo (tipo, archivo, nombre, descripcion, precio, orden, activo)
+                VALUES (%s, %s, %s, %s, %s, %s, 1)
+            ''', (tipo, archivo, nombre, descripcion, precio, orden))
+        print("✅ Catalogo por defecto creado (5 productos, 6 estilos)")
 
     conn.commit()
     conn.close()

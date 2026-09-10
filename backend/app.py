@@ -5,20 +5,8 @@ from datetime import datetime, timedelta, timezone
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
-from database import get_db, init_db
+from database import get_db, init_db, normalizar_username
 import requests
-import unicodedata
-
-def normalizar_username(nombre):
-    """Convierte un nombre en un username válido: minúsculas, sin acentos, sin espacios."""
-    if not nombre:
-        return 'barbero'
-    nfkd = unicodedata.normalize('NFKD', nombre)
-    solo_ascii = nfkd.encode('ASCII', 'ignore').decode('ASCII')
-    username = ''.join(c for c in solo_ascii.lower() if c.isalnum())
-    if not username:
-        username = 'barbero'
-    return username
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'dev-key-123')
@@ -30,21 +18,21 @@ logging.basicConfig(
     format='%(asctime)s - %(message)s'
 )
 
-# ===== CONFIGURACIÓN DE ZONA HORARIA (VENEZUELA UTC-4) =====
+# ===== ZONA HORARIA VENEZUELA =====
 ZONA_HORARIA_VE = timezone(timedelta(hours=-4))
 
 def ahora_ve():
-    """Devuelve la fecha/hora actual en zona horaria de Venezuela."""
     return datetime.now(ZONA_HORARIA_VE)
 
-# ===== CONFIGURACIÓN TELEGRAM =====
+# ===== CONFIG TELEGRAM =====
 TELEGRAM_TOKEN = os.environ.get('TELEGRAM_TOKEN', '')
 TELEGRAM_CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID', '')
 
 init_db()
 
-# ========== FUNCIONES AUXILIARES ==========
 DIAS_ES = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo']
+
+# ========== AUXILIARES ==========
 
 def es_dia_habil(fecha_str):
     try:
@@ -54,7 +42,6 @@ def es_dia_habil(fecha_str):
         return False
 
 def obtener_usuario_actual():
-    """Obtiene el usuario autenticado desde el header X-Username."""
     username = request.headers.get('X-Username')
     if not username:
         return None
@@ -71,14 +58,12 @@ def obtener_usuario_actual():
         return None
 
 def requiere_autenticacion():
-    """Verifica que haya un usuario autenticado."""
     user = obtener_usuario_actual()
     if not user:
         return None, jsonify({'error': 'No autenticado'}), 401
     return user, None, None
 
 def requiere_admin():
-    """Verifica que el usuario sea admin."""
     user = obtener_usuario_actual()
     if not user:
         return None, jsonify({'error': 'No autenticado'}), 401
@@ -87,7 +72,6 @@ def requiere_admin():
     return user, None, None
 
 def actualizar_citas_pasadas():
-    """Marca citas pasadas como realizadas/expiradas."""
     try:
         conn = get_db()
         cursor = conn.cursor()
@@ -100,7 +84,6 @@ def actualizar_citas_pasadas():
         logging.error(f"Error actualizando citas pasadas: {e}")
 
 def enviar_telegram(mensaje, chat_id=None):
-    """Envía un mensaje por Telegram."""
     if not TELEGRAM_TOKEN:
         return False
     destinatario = chat_id or TELEGRAM_CHAT_ID
@@ -113,21 +96,18 @@ def enviar_telegram(mensaje, chat_id=None):
         response.raise_for_status()
         return True
     except Exception as e:
-        logging.error(f"Error enviando Telegram: {e}")
+        logging.error(f"Error Telegram: {e}")
         return False
 
 def calcular_huecos_libres(fecha_str, barbero_id=0):
-    """Genera horas disponibles."""
     conn = get_db()
     cursor = conn.cursor()
-
     if not es_dia_habil(fecha_str):
         conn.close()
         return []
 
     fecha = datetime.strptime(fecha_str, '%Y-%m-%d')
     dia_semana = fecha.weekday()
-
     if dia_semana < 5:
         bloques = [('08:00', '12:00'), ('14:00', '17:00')]
     else:
@@ -148,7 +128,6 @@ def calcular_huecos_libres(fecha_str, barbero_id=0):
         if not barbero:
             conn.close()
             return []
-        
         try:
             dias = json.loads(barbero['dias_trabajo'])
         except (json.JSONDecodeError, TypeError):
@@ -156,7 +135,6 @@ def calcular_huecos_libres(fecha_str, barbero_id=0):
         if DIAS_ES[dia_semana] not in dias:
             conn.close()
             return []
-        
         cursor.execute('''
             SELECT 1 FROM bloqueos 
             WHERE barbero_id = %s AND activo = 1 
@@ -165,7 +143,6 @@ def calcular_huecos_libres(fecha_str, barbero_id=0):
         if cursor.fetchone():
             conn.close()
             return []
-        
         cursor.execute('''
             SELECT hora_inicio FROM citas 
             WHERE barbero_id = %s AND fecha = %s 
@@ -179,7 +156,6 @@ def calcular_huecos_libres(fecha_str, barbero_id=0):
         if not barberos:
             conn.close()
             return []
-        
         dia_actual = DIAS_ES[dia_semana]
         barberos_hoy = []
         for b in barberos:
@@ -197,11 +173,9 @@ def calcular_huecos_libres(fecha_str, barbero_id=0):
             if cursor.fetchone():
                 continue
             barberos_hoy.append(b['id'])
-        
         if not barberos_hoy:
             conn.close()
             return []
-        
         disponibles = []
         for hora in todas_las_horas:
             for bid in barberos_hoy:
@@ -213,11 +187,10 @@ def calcular_huecos_libres(fecha_str, barbero_id=0):
                 if not cursor.fetchone():
                     disponibles.append(hora)
                     break
-    
     conn.close()
     return sorted(set(disponibles))
 
-# ========== ENDPOINTS PÚBLICOS ==========
+# ========== PÚBLICOS ==========
 
 @app.route('/')
 def home():
@@ -235,17 +208,32 @@ def listar_barberos_publico():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/catalogo', methods=['GET'])
+def catalogo_publico():
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT id, tipo, archivo, nombre, descripcion, precio, orden
+            FROM catalogo WHERE activo = 1
+            ORDER BY tipo, orden, nombre
+        ''')
+        items = cursor.fetchall()
+        conn.close()
+        return jsonify([dict(i) for i in items])
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/disponibilidad', methods=['GET'])
 def disponibilidad():
     fecha = request.args.get('fecha')
     barbero_id = request.args.get('barbero_id', 0, type=int)
     if not fecha:
-        return jsonify({'error': 'Falta parámetro fecha'}), 400
+        return jsonify({'error': 'Falta fecha'}), 400
     try:
         disponibles = calcular_huecos_libres(fecha, barbero_id)
         return jsonify({'disponibles': disponibles, 'fecha': fecha, 'total': len(disponibles)})
     except Exception as e:
-        logging.error(f"Error en disponibilidad: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/reservar', methods=['POST'])
@@ -261,7 +249,7 @@ def reservar():
         if fecha_cita < ahora_ve():
             return jsonify({'error': 'No se pueden hacer reservas en el pasado'}), 400
     except ValueError:
-        return jsonify({'error': 'Formato de fecha u hora inválido'}), 400
+        return jsonify({'error': 'Formato inválido'}), 400
 
     try:
         fecha = data['fecha']
@@ -277,7 +265,6 @@ def reservar():
 
         conn = get_db()
         cursor = conn.cursor()
-
         cursor.execute('SELECT duracion_minutos, nombre as servicio_nombre FROM servicios WHERE id = %s AND activo = 1', (servicio_id,))
         servicio = cursor.fetchone()
         if not servicio:
@@ -326,7 +313,7 @@ def reservar():
                     break
             if barbero_id == 0:
                 conn.close()
-                return jsonify({'error': 'No hay barberos disponibles en ese horario'}), 409
+                return jsonify({'error': 'No hay barberos disponibles'}), 409
         else:
             cursor.execute('SELECT dias_trabajo, nombre FROM barberos WHERE id = %s AND activo = 1', (barbero_id,))
             b = cursor.fetchone()
@@ -350,7 +337,7 @@ def reservar():
             ''', (barbero_id, fecha, fecha))
             if cursor.fetchone():
                 conn.close()
-                return jsonify({'error': 'El barbero no está disponible ese día'}), 409
+                return jsonify({'error': 'El barbero no está disponible'}), 409
             cursor.execute('''
                 SELECT 1 FROM citas 
                 WHERE barbero_id = %s AND fecha = %s AND hora_inicio = %s
@@ -367,8 +354,7 @@ def reservar():
         else:
             cursor.execute('''
                 INSERT INTO clientes (nombre, telefono, notas_habituales) 
-                VALUES (%s, %s, %s)
-                RETURNING id
+                VALUES (%s, %s, %s) RETURNING id
             ''', (nombre, telefono, notas))
             cliente_id = cursor.fetchone()['id']
 
@@ -385,102 +371,22 @@ def reservar():
         conn.close()
 
         try:
-            emoji_estado = "⚠️ URGENTE - Requiere confirmación" if tipo_reserva == 'urgente' else "✅ Confirmada automáticamente"
-            mensaje = (
+            emoji = "⚠️ URGENTE" if tipo_reserva == 'urgente' else "✅ Confirmada"
+            enviar_telegram(
                 f"🔔 <b>NUEVA CITA #{cita_id}</b>\n\n"
-                f"👤 Cliente: <b>{nombre}</b>\n"
-                f"📱 Teléfono: {telefono or 'No proporcionado'}\n"
-                f"✂️ Servicio: <b>{servicio_nombre}</b>\n"
-                f"📅 Fecha: <b>{fecha}</b>\n"
-                f"⏰ Hora: <b>{hora_inicio}</b>\n"
-                f"💈 Barbero: <b>{barbero_nombre}</b>\n"
-                f"📝 Notas: {notas or 'Sin notas'}\n\n"
-                f"{emoji_estado}"
+                f"👤 {nombre}\n📱 {telefono or 'N/A'}\n"
+                f"✂️ {servicio_nombre}\n📅 {fecha}\n⏰ {hora_inicio}\n"
+                f"💈 {barbero_nombre}\n\n{emoji}"
             )
-            enviar_telegram(mensaje)
         except Exception as e:
-            logging.error(f"Error notificando cita por Telegram: {e}")
+            logging.error(f"Error Telegram: {e}")
 
         if tipo_reserva == 'urgente':
-            return jsonify({'mensaje': 'Solicitud urgente enviada. Esperando confirmación del barbero.',
-                            'citaId': cita_id, 'estado': 'pendiente_confirmacion'})
+            return jsonify({'mensaje': 'Solicitud urgente enviada', 'citaId': cita_id, 'estado': 'pendiente_confirmacion'})
         else:
-            return jsonify({'mensaje': '¡Cita agendada exitosamente!', 'citaId': cita_id, 'estado': 'confirmada'})
+            return jsonify({'mensaje': '¡Cita agendada!', 'citaId': cita_id, 'estado': 'confirmada'})
     except Exception as e:
         logging.error(f"Error en reservar: {e}")
-        return jsonify({'error': str(e)}), 500
-
-# ========== ELIMINACIÓN PERMANENTE (SOLO ADMIN) ==========
-
-@app.route('/api/admin/citas/<int:cita_id>', methods=['DELETE'])
-def eliminar_cita_permanente(cita_id):
-    """Elimina una cita permanentemente de la base de datos."""
-    user, error, code = requiere_admin()
-    if error: return error, code
-    try:
-        conn = get_db()
-        cursor = conn.cursor()
-        cursor.execute('SELECT id FROM citas WHERE id = %s', (cita_id,))
-        if not cursor.fetchone():
-            conn.close()
-            return jsonify({'error': 'Cita no encontrada'}), 404
-        
-        # Eliminar logs de notificación primero (FK)
-        cursor.execute('DELETE FROM logs_notificaciones WHERE cita_id = %s', (cita_id,))
-        # Eliminar cita
-        cursor.execute('DELETE FROM citas WHERE id = %s', (cita_id,))
-        conn.commit()
-        conn.close()
-        return jsonify({'mensaje': 'Cita eliminada permanentemente'})
-    except Exception as e:
-        logging.error(f"Error eliminando cita: {e}")
-        return jsonify({'error': str(e)}), 500
-
-
-@app.route('/api/admin/barberos/<int:barbero_id>/permanente', methods=['DELETE'])
-def eliminar_barbero_permanente(barbero_id):
-    """Elimina un barbero permanentemente (con validación)."""
-    user, error, code = requiere_admin()
-    if error: return error, code
-    try:
-        conn = get_db()
-        cursor = conn.cursor()
-        
-        # Verificar que el barbero existe
-        cursor.execute('SELECT nombre FROM barberos WHERE id = %s', (barbero_id,))
-        barbero = cursor.fetchone()
-        if not barbero:
-            conn.close()
-            return jsonify({'error': 'Barbero no encontrado'}), 404
-        
-        # Verificar que no tenga citas activas (futuras)
-        hoy = ahora_ve().strftime('%Y-%m-%d')
-        cursor.execute('''
-            SELECT COUNT(*) as cnt FROM citas 
-            WHERE barbero_id = %s AND fecha >= %s 
-            AND estado IN ('confirmada', 'pendiente_confirmacion')
-        ''', (barbero_id, hoy))
-        cnt = cursor.fetchone()['cnt']
-        if cnt > 0:
-            conn.close()
-            return jsonify({
-                'error': f'El barbero tiene {cnt} citas activas. Cancélalas primero.'
-            }), 400
-        
-        # Eliminar usuario asociado
-        cursor.execute('DELETE FROM usuarios WHERE barbero_id = %s', (barbero_id,))
-        # Eliminar bloqueos
-        cursor.execute('DELETE FROM bloqueos WHERE barbero_id = %s', (barbero_id,))
-        # Eliminar barbero
-        cursor.execute('DELETE FROM barberos WHERE id = %s', (barbero_id,))
-        conn.commit()
-        conn.close()
-        
-        enviar_telegram(f"🗑️ <b>Barbero eliminado permanentemente</b>\nNombre: {barbero['nombre']}")
-        
-        return jsonify({'mensaje': f'Barbero "{barbero["nombre"]}" eliminado permanentemente'})
-    except Exception as e:
-        logging.error(f"Error eliminando barbero: {e}")
         return jsonify({'error': str(e)}), 500
 
 # ========== LOGIN ==========
@@ -507,10 +413,9 @@ def login():
             'barbero_id': user['barbero_id']
         })
     except Exception as e:
-        logging.error(f"Error en login: {e}")
         return jsonify({'error': str(e)}), 500
 
-# ========== GESTIÓN DE BARBEROS (SOLO ADMIN) ==========
+# ========== BARBEROS (ADMIN) ==========
 
 @app.route('/api/admin/barberos', methods=['GET'])
 def listar_barberos():
@@ -537,17 +442,13 @@ def crear_barbero():
         conn = get_db()
         cursor = conn.cursor()
         dias = data.get('dias_trabajo', ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado'])
-        
-        # Crear barbero
         cursor.execute('''
             INSERT INTO barberos (nombre, telefono, email, dias_trabajo)
-            VALUES (%s, %s, %s, %s)
-            RETURNING id
+            VALUES (%s, %s, %s, %s) RETURNING id
         ''', (data['nombre'].strip(), data.get('telefono', '').strip(),
               data.get('email', '').strip(), json.dumps(dias)))
         nuevo_id = cursor.fetchone()['id']
         
-        # Generar username y password automáticamente
         username_base = normalizar_username(data['nombre'])
         username = username_base
         contador = 2
@@ -557,30 +458,20 @@ def crear_barbero():
                 break
             username = f"{username_base}{contador}"
             contador += 1
-        
         password = f"{username}123"
         pwd_hash = generate_password_hash(password)
-        
         cursor.execute('''
             INSERT INTO usuarios (username, password_hash, rol, barbero_id)
             VALUES (%s, %s, 'barbero', %s)
         ''', (username, pwd_hash, nuevo_id))
-        
         conn.commit()
         conn.close()
 
-        enviar_telegram(
-            f"👨‍🦱 <b>Nuevo barbero creado</b>\n"
-            f"Nombre: {data['nombre']}\n"
-            f"Usuario: <code>{username}</code>\n"
-            f"Contraseña: <code>{password}</code>"
-        )
+        enviar_telegram(f"👨‍🦱 <b>Nuevo barbero</b>\n{data['nombre']}\nUsuario: <code>{username}</code>\nContraseña: <code>{password}</code>")
 
         return jsonify({
             'mensaje': f'Barbero creado. Usuario: {username} / Contraseña: {password}',
-            'id': nuevo_id,
-            'username': username,
-            'password': password
+            'id': nuevo_id, 'username': username, 'password': password
         })
     except Exception as e:
         logging.error(f"Error creando barbero: {e}")
@@ -619,9 +510,7 @@ def actualizar_barbero(barbero_id):
             valores.append(barbero_id)
             cursor.execute(f"UPDATE barberos SET {', '.join(campos)} WHERE id = %s", valores)
         
-        # Si cambió el nombre, regenerar usuario y contraseña
-        username_generado = None
-        password_generado = None
+        username_gen = password_gen = None
         if nombre_nuevo != nombre_anterior:
             username_base = normalizar_username(nombre_nuevo)
             username = username_base
@@ -632,14 +521,10 @@ def actualizar_barbero(barbero_id):
                     break
                 username = f"{username_base}{contador}"
                 contador += 1
-            
             password = f"{username}123"
             pwd_hash = generate_password_hash(password)
-            
-            # Actualizar o crear usuario
             cursor.execute('SELECT id FROM usuarios WHERE barbero_id = %s', (barbero_id,))
-            user_existente = cursor.fetchone()
-            if user_existente:
+            if cursor.fetchone():
                 cursor.execute('UPDATE usuarios SET username = %s, password_hash = %s WHERE barbero_id = %s',
                                (username, pwd_hash, barbero_id))
             else:
@@ -647,26 +532,24 @@ def actualizar_barbero(barbero_id):
                     INSERT INTO usuarios (username, password_hash, rol, barbero_id)
                     VALUES (%s, %s, 'barbero', %s)
                 ''', (username, pwd_hash, barbero_id))
-            
-            username_generado = username
-            password_generado = password
+            username_gen = username
+            password_gen = password
         
         conn.commit()
         conn.close()
         
-        respuesta = {'mensaje': 'Barbero actualizado exitosamente'}
-        if username_generado:
-            respuesta['mensaje'] += f'. Nuevo usuario: {username_generado} / Contraseña: {password_generado}'
-            respuesta['username'] = username_generado
-            respuesta['password'] = password_generado
-        
+        respuesta = {'mensaje': 'Barbero actualizado'}
+        if username_gen:
+            respuesta['mensaje'] += f'. Usuario: {username_gen} / Contraseña: {password_gen}'
+            respuesta['username'] = username_gen
+            respuesta['password'] = password_gen
         return jsonify(respuesta)
     except Exception as e:
-        logging.error(f"Error actualizando barbero: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/admin/barberos/<int:barbero_id>', methods=['DELETE'])
 def eliminar_barbero(barbero_id):
+    """Desactiva un barbero (soft delete)."""
     user, error, code = requiere_admin()
     if error: return error, code
     try:
@@ -688,21 +571,150 @@ def eliminar_barbero(barbero_id):
             AND estado IN ('confirmada', 'pendiente_confirmacion')
         ''', (barbero_id, hoy))
         canceladas = cursor.rowcount
-        
         conn.commit()
         conn.close()
-
-        enviar_telegram(f"🚫 <b>Barbero desactivado</b>\nNombre: {barbero['nombre']}\nCitas canceladas: {canceladas}")
-
+        
+        enviar_telegram(f"🚫 <b>Barbero desactivado</b>\n{barbero['nombre']}\nCitas canceladas: {canceladas}")
+        
         return jsonify({
             'mensaje': f'Barbero "{barbero["nombre"]}" desactivado. {canceladas} citas canceladas.',
             'citas_canceladas': canceladas
         })
     except Exception as e:
-        logging.error(f"Error desactivando barbero: {e}")
         return jsonify({'error': str(e)}), 500
 
-# ========== PANEL: CITAS ==========
+@app.route('/api/admin/barberos/<int:barbero_id>/permanente', methods=['DELETE'])
+def eliminar_barbero_permanente(barbero_id):
+    """Elimina un barbero permanentemente."""
+    user, error, code = requiere_admin()
+    if error: return error, code
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute('SELECT nombre FROM barberos WHERE id = %s', (barbero_id,))
+        barbero = cursor.fetchone()
+        if not barbero:
+            conn.close()
+            return jsonify({'error': 'Barbero no encontrado'}), 404
+        
+        hoy = ahora_ve().strftime('%Y-%m-%d')
+        cursor.execute('''
+            SELECT COUNT(*) as cnt FROM citas 
+            WHERE barbero_id = %s AND fecha >= %s 
+            AND estado IN ('confirmada', 'pendiente_confirmacion')
+        ''', (barbero_id, hoy))
+        cnt = cursor.fetchone()['cnt']
+        if cnt > 0:
+            conn.close()
+            return jsonify({'error': f'Tiene {cnt} citas activas. Cancélalas primero.'}), 400
+        
+        cursor.execute('DELETE FROM usuarios WHERE barbero_id = %s', (barbero_id,))
+        cursor.execute('DELETE FROM bloqueos WHERE barbero_id = %s', (barbero_id,))
+        cursor.execute('DELETE FROM barberos WHERE id = %s', (barbero_id,))
+        conn.commit()
+        conn.close()
+        
+        enviar_telegram(f"🗑️ <b>Barbero eliminado permanentemente</b>\n{barbero['nombre']}")
+        return jsonify({'mensaje': f'Barbero "{barbero["nombre"]}" eliminado permanentemente'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# ========== CATALOGO (ADMIN) ==========
+
+@app.route('/api/admin/catalogo', methods=['GET'])
+def catalogo_admin():
+    user, error, code = requiere_admin()
+    if error: return error, code
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT id, tipo, archivo, nombre, descripcion, precio, orden, activo
+            FROM catalogo ORDER BY tipo, orden, nombre
+        ''')
+        items = cursor.fetchall()
+        conn.close()
+        return jsonify([dict(i) for i in items])
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/catalogo', methods=['POST'])
+def crear_item_catalogo():
+    user, error, code = requiere_admin()
+    if error: return error, code
+    data = request.json
+    tipo = data.get('tipo', '').strip()
+    archivo = data.get('archivo', '').strip()
+    nombre = data.get('nombre', '').strip()
+    if tipo not in ('producto', 'estilo'):
+        return jsonify({'error': 'Tipo debe ser producto o estilo'}), 400
+    if not archivo or not nombre:
+        return jsonify({'error': 'Archivo y nombre obligatorios'}), 400
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO catalogo (tipo, archivo, nombre, descripcion, precio, orden, activo)
+            VALUES (%s, %s, %s, %s, %s, %s, 1) RETURNING id
+        ''', (tipo, archivo, nombre, data.get('descripcion', '').strip(),
+              data.get('precio', '').strip(), int(data.get('orden', 0))))
+        nuevo_id = cursor.fetchone()['id']
+        conn.commit()
+        conn.close()
+        return jsonify({'mensaje': 'Item creado', 'id': nuevo_id})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/catalogo/<int:item_id>', methods=['PUT'])
+def actualizar_item_catalogo(item_id):
+    user, error, code = requiere_admin()
+    if error: return error, code
+    data = request.json
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute('SELECT id FROM catalogo WHERE id = %s', (item_id,))
+        if not cursor.fetchone():
+            conn.close()
+            return jsonify({'error': 'Item no encontrado'}), 404
+        campos, valores = [], []
+        for campo in ['tipo', 'archivo', 'nombre', 'descripcion', 'precio']:
+            if campo in data:
+                campos.append(f'{campo} = %s')
+                valores.append(str(data[campo]).strip())
+        if 'orden' in data:
+            campos.append('orden = %s'); valores.append(int(data['orden']))
+        if 'activo' in data:
+            campos.append('activo = %s'); valores.append(1 if data['activo'] else 0)
+        if not campos:
+            conn.close()
+            return jsonify({'error': 'Sin campos'}), 400
+        valores.append(item_id)
+        cursor.execute(f"UPDATE catalogo SET {', '.join(campos)} WHERE id = %s", valores)
+        conn.commit()
+        conn.close()
+        return jsonify({'mensaje': 'Item actualizado'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/catalogo/<int:item_id>', methods=['DELETE'])
+def eliminar_item_catalogo(item_id):
+    user, error, code = requiere_admin()
+    if error: return error, code
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute('DELETE FROM catalogo WHERE id = %s', (item_id,))
+        if cursor.rowcount == 0:
+            conn.close()
+            return jsonify({'error': 'Item no encontrado'}), 404
+        conn.commit()
+        conn.close()
+        return jsonify({'mensaje': 'Item eliminado'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# ========== PANEL ==========
 
 @app.route('/api/panel/pendientes', methods=['GET'])
 def listar_pendientes():
@@ -725,7 +737,6 @@ def listar_pendientes():
             WHERE c.estado = 'pendiente_confirmacion' AND c.fecha >= %s
         '''
         params = [hoy]
-        # Si es barbero, filtrar solo sus citas
         if user['rol'] == 'barbero' and user['barbero_id']:
             query += ' AND c.barbero_id = %s'
             params.append(user['barbero_id'])
@@ -747,8 +758,7 @@ def historial_citas():
         cursor = conn.cursor()
         query = '''
             SELECT c.id, c.fecha, c.hora_inicio, c.estado, c.tipo_reserva,
-                   cl.nombre as cliente, s.nombre as servicio,
-                   b.nombre as barbero
+                   cl.nombre as cliente, s.nombre as servicio, b.nombre as barbero
             FROM citas c
             JOIN clientes cl ON c.cliente_id = cl.id
             JOIN servicios s ON c.servicio_id = s.id
@@ -758,7 +768,7 @@ def historial_citas():
         if user['rol'] == 'barbero' and user['barbero_id']:
             query += ' WHERE c.barbero_id = %s'
             params.append(user['barbero_id'])
-        query += ' ORDER BY c.fecha DESC, c.hora_inicio DESC LIMIT 100'
+        query += ' ORDER BY c.fecha DESC, c.hora_inicio DESC LIMIT 200'
         cursor.execute(query, params)
         citas = cursor.fetchall()
         conn.close()
@@ -781,21 +791,20 @@ def confirmar_cita():
         cita = cursor.fetchone()
         if not cita:
             conn.close()
-            return jsonify({'error': 'Cita no encontrada'}), 404
-        # Si es barbero, verificar que sea su cita
+            return jsonify({'error': 'No encontrada'}), 404
         if user['rol'] == 'barbero' and cita['barbero_id'] != user['barbero_id']:
             conn.close()
-            return jsonify({'error': 'No autorizado para esta cita'}), 403
+            return jsonify({'error': 'No autorizado'}), 403
         if cita['estado'] != 'pendiente_confirmacion':
             conn.close()
-            return jsonify({'error': 'La cita no está pendiente'}), 400
+            return jsonify({'error': 'No está pendiente'}), 400
         cursor.execute("UPDATE citas SET estado = 'confirmada' WHERE id = %s", (cita_id,))
         if cita['cita_original_id']:
             cursor.execute("UPDATE citas SET estado = 'cancelada_por_barbero' WHERE id = %s", (cita['cita_original_id'],))
         conn.commit()
         conn.close()
-        enviar_telegram(f"✅ <b>Cita #{cita_id} CONFIRMADA</b> por {user['username']}")
-        return jsonify({'mensaje': 'Cita confirmada exitosamente'})
+        enviar_telegram(f"✅ Cita #{cita_id} confirmada por {user['username']}")
+        return jsonify({'mensaje': 'Confirmada'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -814,18 +823,18 @@ def rechazar_cita():
         cita = cursor.fetchone()
         if not cita:
             conn.close()
-            return jsonify({'error': 'Cita no encontrada'}), 404
+            return jsonify({'error': 'No encontrada'}), 404
         if user['rol'] == 'barbero' and cita['barbero_id'] != user['barbero_id']:
             conn.close()
-            return jsonify({'error': 'No autorizado para esta cita'}), 403
+            return jsonify({'error': 'No autorizado'}), 403
         if cita['estado'] != 'pendiente_confirmacion':
             conn.close()
-            return jsonify({'error': 'La cita no está pendiente'}), 400
+            return jsonify({'error': 'No está pendiente'}), 400
         cursor.execute("UPDATE citas SET estado = 'cancelada_por_barbero' WHERE id = %s", (cita_id,))
         conn.commit()
         conn.close()
-        enviar_telegram(f"❌ <b>Cita #{cita_id} RECHAZADA</b> por {user['username']}")
-        return jsonify({'mensaje': 'Cita rechazada'})
+        enviar_telegram(f"❌ Cita #{cita_id} rechazada por {user['username']}")
+        return jsonify({'mensaje': 'Rechazada'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -844,21 +853,40 @@ def cancelar_cita_confirmada():
         cita = cursor.fetchone()
         if not cita:
             conn.close()
-            return jsonify({'error': 'Cita no encontrada'}), 404
+            return jsonify({'error': 'No encontrada'}), 404
         if user['rol'] == 'barbero' and cita['barbero_id'] != user['barbero_id']:
             conn.close()
-            return jsonify({'error': 'No autorizado para esta cita'}), 403
+            return jsonify({'error': 'No autorizado'}), 403
         if cita['estado'] != 'confirmada':
             conn.close()
-            return jsonify({'error': 'Solo se pueden cancelar citas confirmadas'}), 400
+            return jsonify({'error': 'No confirmada'}), 400
         if cita['fecha'] < ahora_ve().strftime('%Y-%m-%d'):
             conn.close()
-            return jsonify({'error': 'No se pueden cancelar citas pasadas'}), 400
+            return jsonify({'error': 'Es del pasado'}), 400
         cursor.execute("UPDATE citas SET estado = 'cancelada_por_barbero' WHERE id = %s", (cita_id,))
         conn.commit()
         conn.close()
-        enviar_telegram(f"🚫 <b>Cita #{cita_id} CANCELADA</b> por {user['username']}")
-        return jsonify({'mensaje': 'Cita cancelada exitosamente'})
+        enviar_telegram(f"🚫 Cita #{cita_id} cancelada por {user['username']}")
+        return jsonify({'mensaje': 'Cancelada'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/citas/<int:cita_id>', methods=['DELETE'])
+def eliminar_cita_permanente(cita_id):
+    user, error, code = requiere_admin()
+    if error: return error, code
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute('SELECT id FROM citas WHERE id = %s', (cita_id,))
+        if not cursor.fetchone():
+            conn.close()
+            return jsonify({'error': 'No encontrada'}), 404
+        cursor.execute('DELETE FROM logs_notificaciones WHERE cita_id = %s', (cita_id,))
+        cursor.execute('DELETE FROM citas WHERE id = %s', (cita_id,))
+        conn.commit()
+        conn.close()
+        return jsonify({'mensaje': 'Cita eliminada permanentemente'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -873,7 +901,6 @@ def bloquear_dias():
     if not fecha_inicio or not fecha_fin:
         return jsonify({'error': 'Faltan fechas'}), 400
     
-    # Si es admin, puede especificar barbero_id; si es barbero, usa el suyo
     if user['rol'] == 'admin':
         barbero_id = int(data.get('barbero_id', 1))
     else:
@@ -892,15 +919,15 @@ def bloquear_dias():
         if citas_afectadas:
             conn.close()
             return jsonify({'citas_afectadas': [dict(c) for c in citas_afectadas],
-                            'mensaje': 'Hay citas confirmadas. ¿Mantener o cancelar todas?'}), 409
+                            'mensaje': 'Hay citas confirmadas'}), 409
         cursor.execute('''
             INSERT INTO bloqueos (barbero_id, fecha_inicio, fecha_fin, motivo)
             VALUES (%s, %s, %s, %s)
         ''', (barbero_id, fecha_inicio, fecha_fin, motivo))
         conn.commit()
         conn.close()
-        enviar_telegram(f"📅 <b>Días bloqueados</b>\nPor: {user['username']}\nDesde: {fecha_inicio}\nHasta: {fecha_fin}\nMotivo: {motivo}")
-        return jsonify({'mensaje': 'Bloqueo agregado correctamente'})
+        enviar_telegram(f"📅 Bloqueo: {fecha_inicio} → {fecha_fin}\nPor: {user['username']}")
+        return jsonify({'mensaje': 'Bloqueo agregado'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -911,7 +938,7 @@ def cancelar_masivo():
     data = request.json
     ids = data.get('cita_ids', [])
     if not ids:
-        return jsonify({'error': 'No se proporcionaron IDs'}), 400
+        return jsonify({'error': 'Sin IDs'}), 400
     try:
         conn = get_db()
         cursor = conn.cursor()
@@ -920,7 +947,7 @@ def cancelar_masivo():
         afectadas = cursor.rowcount
         conn.commit()
         conn.close()
-        enviar_telegram(f"🚫 <b>{afectadas} citas canceladas</b> por {user['username']}")
+        enviar_telegram(f"🚫 {afectadas} citas canceladas por {user['username']}")
         return jsonify({'mensaje': f'{afectadas} citas canceladas'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -967,18 +994,18 @@ def cancelar_cita_cliente():
         cita = cursor.fetchone()
         if not cita:
             conn.close()
-            return jsonify({'error': 'Cita no encontrada'}), 404
+            return jsonify({'error': 'No encontrada'}), 404
         if cita['estado'] not in ('confirmada', 'pendiente_confirmacion'):
             conn.close()
-            return jsonify({'error': 'No se puede cancelar esta cita'}), 400
+            return jsonify({'error': 'No se puede cancelar'}), 400
         if cita['fecha'] < ahora_ve().strftime('%Y-%m-%d'):
             conn.close()
-            return jsonify({'error': 'No se pueden cancelar citas pasadas'}), 400
+            return jsonify({'error': 'Es del pasado'}), 400
         cursor.execute("UPDATE citas SET estado = 'cancelada_por_cliente' WHERE id = %s", (cita_id,))
         conn.commit()
         conn.close()
-        enviar_telegram(f"❌ <b>Cita #{cita_id} CANCELADA por el cliente</b>")
-        return jsonify({'mensaje': 'Cita cancelada exitosamente'})
+        enviar_telegram(f"❌ Cita #{cita_id} cancelada por el cliente")
+        return jsonify({'mensaje': 'Cancelada'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -995,9 +1022,9 @@ def solicitar_modificacion():
             fecha_cita = datetime.strptime(f"{nueva_fecha} {nueva_hora}", "%Y-%m-%d %H:%M")
             fecha_cita = fecha_cita.replace(tzinfo=ZONA_HORARIA_VE)
             if fecha_cita < ahora_ve():
-                return jsonify({'error': 'No se puede modificar a una fecha pasada'}), 400
+                return jsonify({'error': 'Fecha pasada'}), 400
         except ValueError:
-            return jsonify({'error': 'Formato de fecha u hora inválido'}), 400
+            return jsonify({'error': 'Formato inválido'}), 400
 
         conn = get_db()
         cursor = conn.cursor()
@@ -1005,7 +1032,7 @@ def solicitar_modificacion():
         original = cursor.fetchone()
         if not original:
             conn.close()
-            return jsonify({'error': 'Cita original no encontrada'}), 404
+            return jsonify({'error': 'Original no encontrada'}), 404
 
         cursor.execute('''
             SELECT 1 FROM citas 
@@ -1014,7 +1041,7 @@ def solicitar_modificacion():
         ''', (original['barbero_id'], nueva_fecha, nueva_hora))
         if cursor.fetchone():
             conn.close()
-            return jsonify({'error': 'El nuevo hueco no está disponible'}), 409
+            return jsonify({'error': 'Hueco no disponible'}), 409
 
         cursor.execute('SELECT duracion_minutos FROM servicios WHERE id = %s', (original['servicio_id'],))
         servicio = cursor.fetchone()
@@ -1036,18 +1063,10 @@ def solicitar_modificacion():
         conn.commit()
         conn.close()
 
-        enviar_telegram(
-            f"🔄 <b>SOLICITUD DE MODIFICACIÓN</b>\n\n"
-            f"Cita original: #{cita_original_id}\n"
-            f"Nueva fecha: {nueva_fecha}\n"
-            f"Nueva hora: {nueva_hora}\n\n"
-            f"Requiere confirmación del barbero."
-        )
-
-        return jsonify({'mensaje': 'Solicitud de modificación enviada. Espera confirmación del barbero.',
-                        'nueva_cita_id': nueva_cita_id})
+        enviar_telegram(f"🔄 Modificación cita #{cita_original_id} → {nueva_fecha} {nueva_hora}")
+        return jsonify({'mensaje': 'Solicitud enviada', 'nueva_cita_id': nueva_cita_id})
     except Exception as e:
-        logging.error(f"Error en solicitar_modificacion: {e}")
+        logging.error(f"Error: {e}")
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
