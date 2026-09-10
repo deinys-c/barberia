@@ -452,6 +452,8 @@ def crear_barbero():
         conn = get_db()
         cursor = conn.cursor()
         dias = data.get('dias_trabajo', ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado'])
+        
+        # Crear barbero
         cursor.execute('''
             INSERT INTO barberos (nombre, telefono, email, dias_trabajo)
             VALUES (%s, %s, %s, %s)
@@ -460,22 +462,41 @@ def crear_barbero():
               data.get('email', '').strip(), json.dumps(dias)))
         nuevo_id = cursor.fetchone()['id']
         
-        # Crear usuario para el barbero si se proporciona
-        username = data.get('username', '').strip()
-        password = data.get('password', '').strip()
-        if username and password:
-            pwd_hash = generate_password_hash(password)
-            cursor.execute('''
-                INSERT INTO usuarios (username, password_hash, rol, barbero_id)
-                VALUES (%s, %s, 'barbero', %s)
-            ''', (username, pwd_hash, nuevo_id))
+        # Generar username y password automáticamente
+        username_base = normalizar_username(data['nombre'])
+        username = username_base
+        contador = 2
+        while True:
+            cursor.execute('SELECT 1 FROM usuarios WHERE username = %s', (username,))
+            if not cursor.fetchone():
+                break
+            username = f"{username_base}{contador}"
+            contador += 1
+        
+        password = f"{username}123"
+        pwd_hash = generate_password_hash(password)
+        
+        cursor.execute('''
+            INSERT INTO usuarios (username, password_hash, rol, barbero_id)
+            VALUES (%s, %s, 'barbero', %s)
+        ''', (username, pwd_hash, nuevo_id))
         
         conn.commit()
         conn.close()
 
-        enviar_telegram(f"👨‍🦱 <b>Nuevo barbero creado</b>\nNombre: {data['nombre']}")
+        enviar_telegram(
+            f"👨‍🦱 <b>Nuevo barbero creado</b>\n"
+            f"Nombre: {data['nombre']}\n"
+            f"Usuario: <code>{username}</code>\n"
+            f"Contraseña: <code>{password}</code>"
+        )
 
-        return jsonify({'mensaje': 'Barbero creado exitosamente', 'id': nuevo_id})
+        return jsonify({
+            'mensaje': f'Barbero creado. Usuario: {username} / Contraseña: {password}',
+            'id': nuevo_id,
+            'username': username,
+            'password': password
+        })
     except Exception as e:
         logging.error(f"Error creando barbero: {e}")
         return jsonify({'error': str(e)}), 500
@@ -488,13 +509,18 @@ def actualizar_barbero(barbero_id):
     try:
         conn = get_db()
         cursor = conn.cursor()
-        cursor.execute('SELECT id FROM barberos WHERE id = %s', (barbero_id,))
-        if not cursor.fetchone():
+        cursor.execute('SELECT id, nombre FROM barberos WHERE id = %s', (barbero_id,))
+        barbero_actual = cursor.fetchone()
+        if not barbero_actual:
             conn.close()
             return jsonify({'error': 'Barbero no encontrado'}), 404
+        
+        nombre_anterior = barbero_actual['nombre']
+        nombre_nuevo = data.get('nombre', nombre_anterior).strip()
+        
         campos, valores = [], []
         if 'nombre' in data:
-            campos.append('nombre = %s'); valores.append(data['nombre'].strip())
+            campos.append('nombre = %s'); valores.append(nombre_nuevo)
         if 'telefono' in data:
             campos.append('telefono = %s'); valores.append(data['telefono'].strip())
         if 'email' in data:
@@ -503,25 +529,55 @@ def actualizar_barbero(barbero_id):
             campos.append('dias_trabajo = %s'); valores.append(json.dumps(data['dias_trabajo']))
         if 'activo' in data:
             campos.append('activo = %s'); valores.append(1 if data['activo'] else 0)
+        
         if campos:
             valores.append(barbero_id)
             cursor.execute(f"UPDATE barberos SET {', '.join(campos)} WHERE id = %s", valores)
         
-        # Actualizar usuario si se proporciona
-        username = data.get('username', '').strip()
-        password = data.get('password', '').strip()
-        if username and password:
+        # Si cambió el nombre, regenerar usuario y contraseña
+        username_generado = None
+        password_generado = None
+        if nombre_nuevo != nombre_anterior:
+            username_base = normalizar_username(nombre_nuevo)
+            username = username_base
+            contador = 2
+            while True:
+                cursor.execute('SELECT 1 FROM usuarios WHERE username = %s AND barbero_id != %s', (username, barbero_id))
+                if not cursor.fetchone():
+                    break
+                username = f"{username_base}{contador}"
+                contador += 1
+            
+            password = f"{username}123"
             pwd_hash = generate_password_hash(password)
+            
+            # Actualizar o crear usuario
             cursor.execute('SELECT id FROM usuarios WHERE barbero_id = %s', (barbero_id,))
-            if cursor.fetchone():
-                cursor.execute('UPDATE usuarios SET username = %s, password_hash = %s WHERE barbero_id = %s', (username, pwd_hash, barbero_id))
+            user_existente = cursor.fetchone()
+            if user_existente:
+                cursor.execute('UPDATE usuarios SET username = %s, password_hash = %s WHERE barbero_id = %s',
+                               (username, pwd_hash, barbero_id))
             else:
-                cursor.execute('INSERT INTO usuarios (username, password_hash, rol, barbero_id) VALUES (%s, %s, \'barbero\', %s)', (username, pwd_hash, barbero_id))
+                cursor.execute('''
+                    INSERT INTO usuarios (username, password_hash, rol, barbero_id)
+                    VALUES (%s, %s, 'barbero', %s)
+                ''', (username, pwd_hash, barbero_id))
+            
+            username_generado = username
+            password_generado = password
         
         conn.commit()
         conn.close()
-        return jsonify({'mensaje': 'Barbero actualizado exitosamente'})
+        
+        respuesta = {'mensaje': 'Barbero actualizado exitosamente'}
+        if username_generado:
+            respuesta['mensaje'] += f'. Nuevo usuario: {username_generado} / Contraseña: {password_generado}'
+            respuesta['username'] = username_generado
+            respuesta['password'] = password_generado
+        
+        return jsonify(respuesta)
     except Exception as e:
+        logging.error(f"Error actualizando barbero: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/admin/barberos/<int:barbero_id>', methods=['DELETE'])

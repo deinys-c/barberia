@@ -4,7 +4,21 @@ import psycopg2
 import psycopg2.extras
 import sqlite3
 from werkzeug.security import generate_password_hash
+import unicodedata
 
+def normalizar_username(nombre):
+    """Convierte un nombre en un username válido: minúsculas, sin acentos, sin espacios."""
+    if not nombre:
+        return 'barbero'
+    # Quitar acentos
+    nfkd = unicodedata.normalize('NFKD', nombre)
+    solo_ascii = nfkd.encode('ASCII', 'ignore').decode('ASCII')
+    # Minúsculas, solo letras y números
+    username = ''.join(c for c in solo_ascii.lower() if c.isalnum())
+    if not username:
+        username = 'barbero'
+    return username
+    
 DATABASE_URL = os.getenv('DATABASE_URL')
 USING_POSTGRES = DATABASE_URL is not None and DATABASE_URL.startswith('postgres')
 
@@ -21,7 +35,7 @@ def get_db():
         return conn
 
 def init_db():
-    """Crea las tablas y los índices si no existen, e inserta datos de prueba."""
+    """Crea las tablas, índices, y usuarios por defecto."""
     conn = get_db()
     cursor = conn.cursor()
     is_postgres = USING_POSTGRES
@@ -86,12 +100,11 @@ def init_db():
         )
     ''')
 
-    # ===== ÍNDICES PARA RENDIMIENTO =====
+    # ===== ÍNDICES =====
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_citas_fecha ON citas(fecha)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_citas_estado ON citas(estado)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_citas_barbero ON citas(barbero_id)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_citas_cliente ON citas(cliente_id)')
-    # ====================================
 
     # ===== TABLA BLOQUEOS =====
     cursor.execute(f'''
@@ -119,7 +132,7 @@ def init_db():
         )
     ''')
 
-    # ===== TABLA USUARIOS (NUEVO) =====
+    # ===== TABLA USUARIOS =====
     cursor.execute(f'''
         CREATE TABLE IF NOT EXISTS usuarios (
             id {id_def},
@@ -132,7 +145,7 @@ def init_db():
         )
     ''')
 
-    # ===== DATOS DE PRUEBA (SI NO EXISTEN) =====
+    # ===== DATOS DE PRUEBA (BARBERO PRINCIPAL Y SERVICIOS) =====
     if is_postgres:
         cursor.execute("SELECT 1 FROM barberos LIMIT 1")
         existe = cursor.fetchone()
@@ -161,8 +174,12 @@ def init_db():
             ('Barba', 30, 15000),
             ('Combo (Corte + Barba)', 75, 30000)
         ''')
-        
-        # Crear usuario admin por defecto
+        print("✅ Datos de prueba insertados (1 barbero, 3 servicios)")
+
+    # ===== CREAR USUARIO ADMIN SI NO EXISTE =====
+    cursor.execute("SELECT 1 FROM usuarios WHERE username = 'admin'")
+    admin_existe = cursor.fetchone()
+    if not admin_existe:
         admin_hash = generate_password_hash('barberia2026')
         cursor.execute('''
             INSERT INTO usuarios (username, password_hash, rol, barbero_id)
@@ -171,20 +188,40 @@ def init_db():
             INSERT INTO usuarios (username, password_hash, rol, barbero_id)
             VALUES ('admin', ?, 'admin', NULL)
         ''', (admin_hash,))
+        print("✅ Usuario admin creado: admin / barberia2026")
+
+    # ===== CREAR USUARIOS PARA BARBEROS EXISTENTES QUE NO TENGAN =====
+    cursor.execute('SELECT id, nombre FROM barberos WHERE activo = 1')
+    barberos = cursor.fetchall()
+    
+    for b in barberos:
+        barbero_id = b['id']
+        nombre = b['nombre']
         
-        # Crear usuario para el barbero principal
-        barbero_hash = generate_password_hash('barbero123')
+        cursor.execute('SELECT 1 FROM usuarios WHERE barbero_id = %s', (barbero_id,))
+        if cursor.fetchone():
+            continue
+        
+        # Generar username y password
+        username = normalizar_username(nombre)
+        password = f"{username}123"
+        
+        # Verificar colisión y agregar número
+        base_username = username
+        contador = 2
+        while True:
+            cursor.execute('SELECT 1 FROM usuarios WHERE username = %s', (username,))
+            if not cursor.fetchone():
+                break
+            username = f"{base_username}{contador}"
+            contador += 1
+        
+        pwd_hash = generate_password_hash(password)
         cursor.execute('''
             INSERT INTO usuarios (username, password_hash, rol, barbero_id)
-            VALUES ('barbero', %s, 'barbero', %s)
-        ''' if is_postgres else '''
-            INSERT INTO usuarios (username, password_hash, rol, barbero_id)
-            VALUES ('barbero', ?, 'barbero', ?)
-        ''', (barbero_hash, barbero_id))
-        
-        print("✅ Datos de prueba insertados:")
-        print("   - Admin: admin / barberia2026")
-        print("   - Barbero: barbero / barbero123")
+            VALUES (%s, %s, 'barbero', %s)
+        ''', (username, pwd_hash, barbero_id))
+        print(f"✅ Usuario creado: {username} / {password}")
 
     conn.commit()
     conn.close()
