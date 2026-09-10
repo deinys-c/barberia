@@ -714,19 +714,28 @@ function cargarEstilos() {
 
     // ===== INICIALIZACION =====
     document.addEventListener('DOMContentLoaded', function() {
-        // Establecer fecha mínima (hoy)
-        const hoy = new Date();
-        const hoyStr = hoy.toISOString().split('T')[0];
-        document.getElementById('fecha').min = hoyStr;
-        const fecha = new Date();
-        fecha.setDate(fecha.getDate() + 1);
-        const fechaStr = fecha.toISOString().split('T')[0];
-        document.getElementById('fecha').value = fechaStr;
-        document.getElementById('bloqueoInicio').value = fechaStr;
-        document.getElementById('bloqueoFin').value = fechaStr;
-        // Restaurar sesión del barbero
-        verificarSesion();
-    });
+    // Fecha de mañana para reservas
+    const fecha = new Date();
+    fecha.setDate(fecha.getDate() + 1);
+    const fechaStr = fecha.toISOString().split('T')[0];
+    
+    // Fecha de hoy para bloqueos
+    const hoy = new Date();
+    const hoyStr = hoy.toISOString().split('T')[0];
+    
+    // Campo de reserva (cliente) → mínimo mañana
+    document.getElementById('fecha').value = fechaStr;
+    document.getElementById('fecha').min = hoyStr;  // No permite fechas pasadas
+    
+    // Campos de bloqueo (barbero) → mínimo hoy
+    document.getElementById('bloqueoInicio').value = hoyStr;
+    document.getElementById('bloqueoInicio').min = hoyStr;
+    document.getElementById('bloqueoFin').value = hoyStr;
+    document.getElementById('bloqueoFin').min = hoyStr;
+    
+    // Restaurar sesión del barbero
+    verificarSesion();
+});
 </script>
 </body>
 </html>
