@@ -7,6 +7,18 @@ from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
 from database import get_db, init_db
 import requests
+import unicodedata
+
+def normalizar_username(nombre):
+    """Convierte un nombre en un username válido: minúsculas, sin acentos, sin espacios."""
+    if not nombre:
+        return 'barbero'
+    nfkd = unicodedata.normalize('NFKD', nombre)
+    solo_ascii = nfkd.encode('ASCII', 'ignore').decode('ASCII')
+    username = ''.join(c for c in solo_ascii.lower() if c.isalnum())
+    if not username:
+        username = 'barbero'
+    return username
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'dev-key-123')
@@ -396,6 +408,79 @@ def reservar():
             return jsonify({'mensaje': '¡Cita agendada exitosamente!', 'citaId': cita_id, 'estado': 'confirmada'})
     except Exception as e:
         logging.error(f"Error en reservar: {e}")
+        return jsonify({'error': str(e)}), 500
+
+# ========== ELIMINACIÓN PERMANENTE (SOLO ADMIN) ==========
+
+@app.route('/api/admin/citas/<int:cita_id>', methods=['DELETE'])
+def eliminar_cita_permanente(cita_id):
+    """Elimina una cita permanentemente de la base de datos."""
+    user, error, code = requiere_admin()
+    if error: return error, code
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute('SELECT id FROM citas WHERE id = %s', (cita_id,))
+        if not cursor.fetchone():
+            conn.close()
+            return jsonify({'error': 'Cita no encontrada'}), 404
+        
+        # Eliminar logs de notificación primero (FK)
+        cursor.execute('DELETE FROM logs_notificaciones WHERE cita_id = %s', (cita_id,))
+        # Eliminar cita
+        cursor.execute('DELETE FROM citas WHERE id = %s', (cita_id,))
+        conn.commit()
+        conn.close()
+        return jsonify({'mensaje': 'Cita eliminada permanentemente'})
+    except Exception as e:
+        logging.error(f"Error eliminando cita: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/admin/barberos/<int:barbero_id>/permanente', methods=['DELETE'])
+def eliminar_barbero_permanente(barbero_id):
+    """Elimina un barbero permanentemente (con validación)."""
+    user, error, code = requiere_admin()
+    if error: return error, code
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        
+        # Verificar que el barbero existe
+        cursor.execute('SELECT nombre FROM barberos WHERE id = %s', (barbero_id,))
+        barbero = cursor.fetchone()
+        if not barbero:
+            conn.close()
+            return jsonify({'error': 'Barbero no encontrado'}), 404
+        
+        # Verificar que no tenga citas activas (futuras)
+        hoy = ahora_ve().strftime('%Y-%m-%d')
+        cursor.execute('''
+            SELECT COUNT(*) as cnt FROM citas 
+            WHERE barbero_id = %s AND fecha >= %s 
+            AND estado IN ('confirmada', 'pendiente_confirmacion')
+        ''', (barbero_id, hoy))
+        cnt = cursor.fetchone()['cnt']
+        if cnt > 0:
+            conn.close()
+            return jsonify({
+                'error': f'El barbero tiene {cnt} citas activas. Cancélalas primero.'
+            }), 400
+        
+        # Eliminar usuario asociado
+        cursor.execute('DELETE FROM usuarios WHERE barbero_id = %s', (barbero_id,))
+        # Eliminar bloqueos
+        cursor.execute('DELETE FROM bloqueos WHERE barbero_id = %s', (barbero_id,))
+        # Eliminar barbero
+        cursor.execute('DELETE FROM barberos WHERE id = %s', (barbero_id,))
+        conn.commit()
+        conn.close()
+        
+        enviar_telegram(f"🗑️ <b>Barbero eliminado permanentemente</b>\nNombre: {barbero['nombre']}")
+        
+        return jsonify({'mensaje': f'Barbero "{barbero["nombre"]}" eliminado permanentemente'})
+    except Exception as e:
+        logging.error(f"Error eliminando barbero: {e}")
         return jsonify({'error': str(e)}), 500
 
 # ========== LOGIN ==========

@@ -31,14 +31,9 @@ function escaparHTML(texto) {
     return div.innerHTML;
 }
 
-/**
- * Fallback de imagen: genera un SVG en memoria (sin petición de red)
- * para evitar el "marco gris titilando" cuando la imagen no existe.
- */
 function imgFallback(nombre, tipo) {
-    // tipo: 'producto' o 'corte'
     const ancho = tipo === 'producto' ? 200 : 150;
-    const alto = tipo === 'producto' ? 150 : 150;
+    const alto = 150;
     const texto = encodeURIComponent(nombre || 'Imagen');
     return `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="${ancho}" height="${alto}" viewBox="0 0 ${ancho} ${alto}"><rect fill="%232c1a12" width="${ancho}" height="${alto}"/><text x="50%" y="50%" fill="%23c9a84c" font-family="Segoe UI, sans-serif" font-size="14" text-anchor="middle" dominant-baseline="middle">${texto}</text></svg>`;
 }
@@ -109,23 +104,27 @@ function cerrarSesion() {
     try { localStorage.removeItem('currentUser'); } catch (e) {}
 }
 
+function esAdmin() {
+    return currentUser && currentUser.rol === 'admin';
+}
+
 function actualizarUISegunRol() {
-    const esAdmin = currentUser && currentUser.rol === 'admin';
+    const admin = esAdmin();
     
     document.querySelectorAll('.solo-admin').forEach(el => {
-        el.style.display = esAdmin ? 'inline-block' : 'none';
+        el.style.display = admin ? 'inline-block' : 'none';
     });
     
     const tabConfig = document.querySelector('#tabsBarbero button:nth-child(4)');
     if (tabConfig) {
-        tabConfig.textContent = esAdmin ? 'Configuracion' : 'Bloquear dias';
+        tabConfig.textContent = admin ? 'Configuracion' : 'Bloquear dias';
     }
     
     const filtrosP = document.getElementById('filtrosPendientes');
     const filtrosH = document.getElementById('filtrosHistorial');
     const filaSel = document.getElementById('filaSelectorBloqueo');
     
-    if (esAdmin) {
+    if (admin) {
         if (filtrosP) filtrosP.style.display = 'flex';
         if (filtrosH) filtrosH.style.display = 'flex';
         if (filaSel) filaSel.style.display = 'flex';
@@ -263,7 +262,7 @@ function cambiarTabBarbero(tab) {
         document.getElementById('tabHistorial').style.display = 'block';
         cargarHistorial();
     } else if (tab === 'barberos') {
-        if (!currentUser || currentUser.rol !== 'admin') {
+        if (!esAdmin()) {
             alert('Solo el administrador puede gestionar barberos');
             return;
         }
@@ -483,6 +482,10 @@ async function cargarPendientes() {
             const div = document.createElement('div');
             div.className = 'cita-item';
             const alerta = c.alerta_cierre ? '<span class="alerta-cierre">Extiende horario</span>' : '';
+            let botonEliminar = '';
+            if (esAdmin()) {
+                botonEliminar = `<button class="btn-danger" style="background:#5a1a1a;" onclick="eliminarCitaPermanente(${c.id})">🗑️ Eliminar</button>`;
+            }
             div.innerHTML = `
                 <div class="info">
                     <div class="fecha-hora">${escaparHTML(c.fecha)} - ${escaparHTML(c.hora_inicio)} ${alerta}</div>
@@ -495,6 +498,7 @@ async function cargarPendientes() {
                 <div class="acciones">
                     <button class="btn-confirmar" onclick="confirmarCita(${c.id})">Aceptar</button>
                     <button class="btn-rechazar" onclick="rechazarCita(${c.id})">Rechazar</button>
+                    ${botonEliminar}
                 </div>
             `;
             cont.appendChild(div);
@@ -574,9 +578,12 @@ async function cargarHistorial() {
             const div = document.createElement('div');
             div.className = 'cita-item';
             const estado = estados[c.estado] || { clase: 'estado-pendiente', texto: c.estado };
-            let botonCancelar = '';
+            let botones = '';
             if (c.estado === 'confirmada') {
-                botonCancelar = `<button class="btn-danger" onclick="cancelarCitaConfirmada(${c.id})">Cancelar</button>`;
+                botones += `<button class="btn-danger" onclick="cancelarCitaConfirmada(${c.id})">Cancelar</button>`;
+            }
+            if (esAdmin()) {
+                botones += `<button class="btn-danger" style="background:#5a1a1a;" onclick="eliminarCitaPermanente(${c.id})">🗑️ Eliminar</button>`;
             }
             div.innerHTML = `
                 <div class="info">
@@ -585,7 +592,7 @@ async function cargarHistorial() {
                     <div class="barbero-info">Barbero: ${escaparHTML(c.barbero || 'N/A')}</div>
                 </div>
                 <div><span class="estado ${estado.clase}">${estado.texto}</span></div>
-                <div class="acciones">${botonCancelar}</div>
+                <div class="acciones">${botones}</div>
             `;
             cont.appendChild(div);
         });
@@ -608,6 +615,26 @@ async function cancelarCitaConfirmada(citaId) {
         if (res.ok) cargarHistorial();
     } catch (error) {
         console.error('Error cancelando cita:', error);
+        alert('Error al conectar con el servidor.');
+    }
+}
+
+async function eliminarCitaPermanente(citaId) {
+    if (!confirm('⚠️ ¿ELIMINAR esta cita PERMANENTEMENTE?\n\nEsta acción NO se puede deshacer.')) return;
+    if (!confirm('¿Estás COMPLETAMENTE seguro? La cita desaparecerá para siempre.')) return;
+    try {
+        const res = await fetch(`${API_URL}/api/admin/citas/${citaId}`, {
+            method: 'DELETE',
+            headers: getAuthHeaders()
+        });
+        const data = await res.json();
+        alert(data.mensaje || data.error);
+        if (res.ok) {
+            cargarHistorial();
+            cargarPendientes();
+        }
+    } catch (error) {
+        console.error('Error eliminando cita:', error);
         alert('Error al conectar con el servidor.');
     }
 }
@@ -688,16 +715,25 @@ async function cargarBarberos() {
         barberos.forEach(b => {
             const div = document.createElement('div');
             div.className = 'cita-item';
+            let botonesBarbero = '';
+            if (b.activo) {
+                botonesBarbero = `
+                    <button class="btn-modificar" onclick="editarBarbero(${b.id})">Editar</button>
+                    <button class="btn-danger" onclick="desactivarBarbero(${b.id})">Desactivar</button>
+                `;
+            } else {
+                botonesBarbero = `
+                    <button class="btn-modificar" onclick="editarBarbero(${b.id})">Editar</button>
+                    <button class="btn-danger" style="background:#5a1a1a;" onclick="eliminarBarberoPermanente(${b.id})">🗑️ Eliminar</button>
+                `;
+            }
             div.innerHTML = `
                 <div class="info">
                     <div class="fecha-hora">${escaparHTML(b.nombre)}</div>
                     <div class="cliente">${escaparHTML(b.telefono || 'Sin telefono')} - ${escaparHTML(b.email || 'Sin email')}</div>
                     <div class="barbero-info">Estado: ${b.activo ? 'Activo' : 'Inactivo'}</div>
                 </div>
-                <div class="acciones">
-                    <button class="btn-modificar" onclick="editarBarbero(${b.id})">Editar</button>
-                    ${b.activo ? `<button class="btn-danger" onclick="desactivarBarbero(${b.id})">Desactivar</button>` : ''}
-                </div>
+                <div class="acciones">${botonesBarbero}</div>
             `;
             cont.appendChild(div);
         });
@@ -748,6 +784,27 @@ async function desactivarBarbero(id) {
     }
 }
 
+async function eliminarBarberoPermanente(id) {
+    if (!confirm('⚠️ ¿ELIMINAR este barbero PERMANENTEMENTE?\n\nSe borrarán TODOS sus datos y su usuario. Esta acción NO se puede deshacer.')) return;
+    if (!confirm('¿Estás COMPLETAMENTE seguro?')) return;
+    try {
+        const res = await fetch(`${API_URL}/api/admin/barberos/${id}/permanente`, {
+            method: 'DELETE',
+            headers: getAuthHeaders()
+        });
+        const data = await res.json();
+        alert(data.mensaje || data.error);
+        if (res.ok) {
+            cargarBarberos();
+            cargarBarberosSelectorAdmin();
+            cargarBarberosSelectorCliente();
+        }
+    } catch (error) {
+        console.error('Error eliminando barbero:', error);
+        alert('Error al conectar con el servidor.');
+    }
+}
+
 async function cargarBarberosSelectorCliente() {
     try {
         const res = await fetch(`${API_URL}/api/barberos`);
@@ -779,7 +836,7 @@ async function cargarBarberosSelectorAdmin() {
         const filtroHist = document.getElementById('filtroBarberoHistorial');
         const bloqueoBarbero = document.getElementById('bloqueoBarbero');
 
-        if (currentUser && currentUser.rol === 'admin') {
+        if (esAdmin()) {
             [filtroPend, filtroHist].forEach(sel => {
                 if (!sel) return;
                 const val = sel.value;
@@ -894,3 +951,28 @@ document.addEventListener('DOMContentLoaded', function() {
 
     cargarBarberosSelectorCliente();
 });
+
+// ===== EXPONER FUNCIONES AL ÁMBITO GLOBAL =====
+window.cambiarVista = cambiarVista;
+window.cambiarTabCliente = cambiarTabCliente;
+window.cambiarTabBarbero = cambiarTabBarbero;
+window.cargarHuecos = cargarHuecos;
+window.reservar = reservar;
+window.consultarCitas = consultarCitas;
+window.cancelarCita = cancelarCita;
+window.solicitarModificacion = solicitarModificacion;
+window.loginUsuario = loginUsuario;
+window.logoutBarbero = logoutBarbero;
+window.cargarPendientes = cargarPendientes;
+window.confirmarCita = confirmarCita;
+window.rechazarCita = rechazarCita;
+window.cargarHistorial = cargarHistorial;
+window.cancelarCitaConfirmada = cancelarCitaConfirmada;
+window.eliminarCitaPermanente = eliminarCitaPermanente;
+window.abrirFormBarbero = abrirFormBarbero;
+window.cerrarFormBarbero = cerrarFormBarbero;
+window.guardarBarbero = guardarBarbero;
+window.editarBarbero = editarBarbero;
+window.desactivarBarbero = desactivarBarbero;
+window.eliminarBarberoPermanente = eliminarBarberoPermanente;
+window.bloquearDias = bloquearDias;
