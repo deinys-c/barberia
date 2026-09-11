@@ -617,6 +617,147 @@ def eliminar_barbero_permanente(barbero_id):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+# ========== SERVICIOS (ADMIN) ==========
+
+@app.route('/api/servicios', methods=['GET'])
+def listar_servicios_publico():
+    """Lista servicios activos (para el selector del cliente)."""
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT id, nombre, duracion_minutos, precio, descripcion
+            FROM servicios WHERE activo = 1
+            ORDER BY id
+        ''')
+        servicios = cursor.fetchall()
+        conn.close()
+        return jsonify([dict(s) for s in servicios])
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/servicios', methods=['GET'])
+def servicios_admin():
+    """Lista todos los servicios (activos e inactivos)."""
+    user, error, code = requiere_admin()
+    if error: return error, code
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT id, nombre, duracion_minutos, precio, descripcion, activo
+            FROM servicios ORDER BY id
+        ''')
+        servicios = cursor.fetchall()
+        conn.close()
+        return jsonify([dict(s) for s in servicios])
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/servicios', methods=['POST'])
+def crear_servicio():
+    user, error, code = requiere_admin()
+    if error: return error, code
+    data = request.json
+    nombre = data.get('nombre', '').strip()
+    duracion = int(data.get('duracion_minutos', 0))
+    precio = float(data.get('precio', 0))
+    if not nombre:
+        return jsonify({'error': 'El nombre es obligatorio'}), 400
+    if duracion <= 0:
+        return jsonify({'error': 'La duración debe ser mayor a 0'}), 400
+    if precio < 0:
+        return jsonify({'error': 'El precio no puede ser negativo'}), 400
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO servicios (nombre, duracion_minutos, precio, descripcion, activo)
+            VALUES (%s, %s, %s, %s, 1) RETURNING id
+        ''', (nombre, duracion, precio, data.get('descripcion', '').strip()))
+        nuevo_id = cursor.fetchone()['id']
+        conn.commit()
+        conn.close()
+        return jsonify({'mensaje': 'Servicio creado', 'id': nuevo_id})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/servicios/<int:servicio_id>', methods=['PUT'])
+def actualizar_servicio(servicio_id):
+    user, error, code = requiere_admin()
+    if error: return error, code
+    data = request.json
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute('SELECT id FROM servicios WHERE id = %s', (servicio_id,))
+        if not cursor.fetchone():
+            conn.close()
+            return jsonify({'error': 'Servicio no encontrado'}), 404
+        
+        campos, valores = [], []
+        if 'nombre' in data:
+            campos.append('nombre = %s')
+            valores.append(str(data['nombre']).strip())
+        if 'duracion_minutos' in data:
+            dur = int(data['duracion_minutos'])
+            if dur <= 0:
+                conn.close()
+                return jsonify({'error': 'Duración inválida'}), 400
+            campos.append('duracion_minutos = %s')
+            valores.append(dur)
+        if 'precio' in data:
+            precio = float(data['precio'])
+            if precio < 0:
+                conn.close()
+                return jsonify({'error': 'Precio inválido'}), 400
+            campos.append('precio = %s')
+            valores.append(precio)
+        if 'descripcion' in data:
+            campos.append('descripcion = %s')
+            valores.append(str(data['descripcion']).strip())
+        if 'activo' in data:
+            campos.append('activo = %s')
+            valores.append(1 if data['activo'] else 0)
+        
+        if not campos:
+            conn.close()
+            return jsonify({'error': 'Sin campos para actualizar'}), 400
+        
+        valores.append(servicio_id)
+        cursor.execute(f"UPDATE servicios SET {', '.join(campos)} WHERE id = %s", valores)
+        conn.commit()
+        conn.close()
+        return jsonify({'mensaje': 'Servicio actualizado'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/servicios/<int:servicio_id>', methods=['DELETE'])
+def eliminar_servicio(servicio_id):
+    """Soft delete: desactiva el servicio."""
+    user, error, code = requiere_admin()
+    if error: return error, code
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        # Verificar si tiene citas asociadas
+        cursor.execute('SELECT COUNT(*) as cnt FROM citas WHERE servicio_id = %s', (servicio_id,))
+        cnt = cursor.fetchone()['cnt']
+        if cnt > 0:
+            # Soft delete si tiene citas
+            cursor.execute('UPDATE servicios SET activo = 0 WHERE id = %s', (servicio_id,))
+            conn.commit()
+            conn.close()
+            return jsonify({'mensaje': f'Servicio desactivado (tenía {cnt} citas asociadas)'})
+        else:
+            # Delete real si no tiene citas
+            cursor.execute('DELETE FROM servicios WHERE id = %s', (servicio_id,))
+            conn.commit()
+            conn.close()
+            return jsonify({'mensaje': 'Servicio eliminado'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 # ========== CATALOGO (ADMIN) ==========
 
 @app.route('/api/admin/catalogo', methods=['GET'])

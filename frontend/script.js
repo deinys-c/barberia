@@ -249,13 +249,18 @@ function cambiarTabBarbero(tab) {
         b[2].classList.add('activo'); document.getElementById('tabBarberos').style.display = 'block';
         cargarBarberos(); cargarBarberosSelectorAdmin();
     }
+    else if (tab === 'servicios') {
+        if (!esAdmin()) { alert('Solo admin'); return; }
+        b[3].classList.add('activo'); document.getElementById('tabServicios').style.display = 'block';
+        cargarServiciosAdmin();
+    }
     else if (tab === 'catalogo') {
         if (!esAdmin()) { alert('Solo admin'); return; }
-        b[3].classList.add('activo'); document.getElementById('tabCatalogo').style.display = 'block';
+        b[4].classList.add('activo'); document.getElementById('tabCatalogo').style.display = 'block';
         cargarCatalogoAdmin();
     }
     else if (tab === 'configuracion') {
-        b[4].classList.add('activo'); document.getElementById('tabConfiguracion').style.display = 'block';
+        b[5].classList.add('activo'); document.getElementById('tabConfiguracion').style.display = 'block';
         cargarBarberosSelectorAdmin();
     }
 }
@@ -859,10 +864,159 @@ async function bloquearDias() {
     }
 }
 
+// ===== SERVICIOS (ADMIN) =====
+async function cargarServiciosAdmin() {
+    const c = document.getElementById('listaServicios');
+    if (!c) return;
+    c.innerHTML = '<div class="sin-huecos">Cargando...</div>';
+    try {
+        const res = await fetch(`${API_URL}/api/admin/servicios`, { headers: getAuthHeaders() });
+        if (res.status === 401) { c.innerHTML = '<div class="sin-huecos">Sesión expirada.</div>'; return; }
+        const servicios = await res.json();
+        c.innerHTML = '';
+        if (!servicios.length) { c.innerHTML = '<div class="sin-huecos">No hay servicios.</div>'; return; }
+        servicios.forEach(s => {
+            const div = document.createElement('div');
+            div.className = 'cita-item';
+            div.style.opacity = s.activo ? 1 : 0.5;
+            div.innerHTML = `
+                <div class="info">
+                    <div class="fecha-hora">${escaparHTML(s.nombre)} ${!s.activo ? '<small style="color:#8a7a6a;">(Inactivo)</small>' : ''}</div>
+                    <div class="servicio">Duracion: ${s.duracion_minutos} min - Precio: $${Number(s.precio).toLocaleString('es-CO')} COP</div>
+                    ${s.descripcion ? `<div class="cliente">${escaparHTML(s.descripcion)}</div>` : ''}
+                </div>
+                <div class="acciones">
+                    <button class="btn-modificar" onclick="editarServicio(${s.id})">Editar</button>
+                    <button class="btn-secundario" onclick="toggleServicioActivo(${s.id}, ${s.activo})">${s.activo ? 'Desactivar' : 'Activar'}</button>
+                    <button class="btn-danger" onclick="eliminarServicio(${s.id})">🗑️</button>
+                </div>
+            `;
+            c.appendChild(div);
+        });
+    } catch (e) { c.innerHTML = '<div class="sin-huecos">Error.</div>'; }
+}
+
+function abrirFormServicio() {
+    document.getElementById('formServicio').style.display = 'block';
+    document.getElementById('servicioEditId').value = '';
+    document.getElementById('servicioNombre').value = '';
+    document.getElementById('servicioDuracion').value = '';
+    document.getElementById('servicioPrecio').value = '';
+    document.getElementById('servicioDescripcion').value = '';
+    document.getElementById('mensajeServicio').style.display = 'none';
+}
+
+function cerrarFormServicio() { document.getElementById('formServicio').style.display = 'none'; }
+
+async function guardarServicio() {
+    const id = document.getElementById('servicioEditId').value;
+    const nombre = document.getElementById('servicioNombre').value.trim();
+    const duracion = parseInt(document.getElementById('servicioDuracion').value);
+    const precio = parseFloat(document.getElementById('servicioPrecio').value);
+    
+    if (!nombre) { alert('El nombre es obligatorio'); return; }
+    if (!duracion || duracion <= 0) { alert('Duración inválida'); return; }
+    if (isNaN(precio) || precio < 0) { alert('Precio inválido'); return; }
+    
+    const body = {
+        nombre,
+        duracion_minutos: duracion,
+        precio: precio,
+        descripcion: document.getElementById('servicioDescripcion').value.trim()
+    };
+    
+    const url = id ? `${API_URL}/api/admin/servicios/${id}` : `${API_URL}/api/admin/servicios`;
+    const method = id ? 'PUT' : 'POST';
+    
+    try {
+        const res = await fetch(url, { method, headers: getAuthHeaders(), body: JSON.stringify(body) });
+        const d = await res.json();
+        const msg = document.getElementById('mensajeServicio');
+        msg.className = 'mensaje ' + (res.ok ? 'exito' : 'error');
+        msg.textContent = d.mensaje || d.error;
+        msg.style.display = 'block';
+        if (res.ok) {
+            setTimeout(() => {
+                cerrarFormServicio();
+                cargarServiciosAdmin();
+                cargarServiciosCliente(); // Actualizar selector del cliente
+            }, 1000);
+        }
+    } catch (e) { alert('Error.'); }
+}
+
+async function editarServicio(id) {
+    try {
+        const res = await fetch(`${API_URL}/api/admin/servicios`, { headers: getAuthHeaders() });
+        const servicios = await res.json();
+        const s = servicios.find(x => x.id === id);
+        if (!s) return;
+        document.getElementById('servicioEditId').value = s.id;
+        document.getElementById('servicioNombre').value = s.nombre;
+        document.getElementById('servicioDuracion').value = s.duracion_minutos;
+        document.getElementById('servicioPrecio').value = s.precio;
+        document.getElementById('servicioDescripcion').value = s.descripcion || '';
+        document.getElementById('formServicio').style.display = 'block';
+        document.getElementById('formServicio').scrollIntoView({ behavior: 'smooth' });
+    } catch (e) { alert('Error.'); }
+}
+
+async function toggleServicioActivo(id, activo) {
+    try {
+        const res = await fetch(`${API_URL}/api/admin/servicios/${id}`, {
+            method: 'PUT', headers: getAuthHeaders(),
+            body: JSON.stringify({ activo: !activo })
+        });
+        if (res.ok) { cargarServiciosAdmin(); cargarServiciosCliente(); }
+    } catch (e) {}
+}
+
+async function eliminarServicio(id) {
+    if (!confirm('¿Eliminar este servicio? Si tiene citas, solo se desactivará.')) return;
+    try {
+        const res = await fetch(`${API_URL}/api/admin/servicios/${id}`, {
+            method: 'DELETE', headers: getAuthHeaders()
+        });
+        const d = await res.json();
+        alert(d.mensaje || d.error);
+        if (res.ok) { cargarServiciosAdmin(); cargarServiciosCliente(); }
+    } catch (e) { alert('Error.'); }
+}
+
+// Cargar servicios dinámicamente en el selector del cliente
+async function cargarServiciosCliente() {
+    try {
+        const res = await fetch(`${API_URL}/api/servicios`);
+        const servicios = await res.json();
+        const sel = document.getElementById('servicio');
+        if (!sel) return;
+        const val = sel.value;
+        sel.innerHTML = '';
+        if (!servicios.length) {
+            sel.innerHTML = '<option value="">No hay servicios</option>';
+            return;
+        }
+        servicios.forEach(s => {
+            const o = document.createElement('option');
+            o.value = s.id;
+            o.textContent = `${s.nombre} (${s.duracion_minutos}min - $${Number(s.precio).toLocaleString('es-CO')} COP)`;
+            sel.appendChild(o);
+        });
+        if (val) sel.value = val;
+    } catch (e) {}
+}
+
+window.abrirFormServicio = abrirFormServicio;
+window.cerrarFormServicio = cerrarFormServicio;
+window.guardarServicio = guardarServicio;
+window.editarServicio = editarServicio;
+window.toggleServicioActivo = toggleServicioActivo;
+window.eliminarServicio = eliminarServicio;
+
 // ===== INICIALIZACIÓN =====
 document.addEventListener('DOMContentLoaded', function() {
     cargarSesion();
-    actualizarUISegunRol();  // ← NUEVA LÍNEA
+    actualizarUISegunRol();
     try {
         const f = new Date(); f.setDate(f.getDate() + 1);
         const fStr = f.toISOString().split('T')[0];
@@ -876,6 +1030,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (iFn) { iFn.value = hStr; iFn.min = hStr; }
     } catch (e) {}
     cargarBarberosSelectorCliente();
+    cargarServiciosCliente(); // ← NUEVA LÍNEA
 });
 
 // ===== EXPORTAR AL GLOBAL =====
