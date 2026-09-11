@@ -27,6 +27,31 @@
         <button onclick="cambiarTabCliente('estilos')">Estilos</button>
     </div>
 
+    <!-- TAB: SERVICIOS (solo admin) -->
+<div id="tabServicios" class="panel-tab" style="display:none;">
+    <h3>Gestion de Servicios</h3>
+    <button class="btn" onclick="abrirFormServicio()">+ Nuevo Servicio</button>
+    
+    <div id="formServicio" style="display:none; background:rgba(255,255,255,0.03); padding:20px; border-radius:8px; margin-top:15px;">
+        <input type="hidden" id="servicioEditId">
+        <div class="row">
+            <div><label>Nombre *</label><input type="text" id="servicioNombre" placeholder="Ej: Corte" maxlength="100"></div>
+            <div><label>Duracion (minutos) *</label><input type="number" id="servicioDuracion" placeholder="45" min="5" max="480"></div>
+        </div>
+        <div class="row">
+            <div><label>Precio (COP) *</label><input type="number" id="servicioPrecio" placeholder="25000" min="0" step="1000"></div>
+            <div><label>Descripcion (opcional)</label><input type="text" id="servicioDescripcion" placeholder="Breve descripcion" maxlength="200"></div>
+        </div>
+        <div style="margin-top:15px;">
+            <button class="btn" onclick="guardarServicio()">Guardar</button>
+            <button class="btn btn-secundario" onclick="cerrarFormServicio()">Cancelar</button>
+        </div>
+        <div id="mensajeServicio" class="mensaje"></div>
+    </div>
+    
+    <div id="listaServicios" style="margin-top:20px;"></div>
+</div>
+
     <div id="tabsBarbero" class="tabs" style="display:none;">
     <button class="activo" onclick="cambiarTabBarbero('pendientes')">Pendientes</button>
     <button onclick="cambiarTabBarbero('historial')">Historial</button>
@@ -34,7 +59,7 @@
     <button onclick="cambiarTabBarbero('servicios')" class="solo-admin" style="display:none;">Servicios</button>
     <button onclick="cambiarTabBarbero('catalogo')" class="solo-admin" style="display:none;">Catalogo</button>
     <button onclick="cambiarTabBarbero('configuracion')">Configuracion</button>
-    </div>
+</div>
 
     <!-- PANEL CLIENTE -->
     <div id="panelCliente" class="panel activo">

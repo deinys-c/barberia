@@ -18,21 +18,16 @@ logging.basicConfig(
     format='%(asctime)s - %(message)s'
 )
 
-# ===== ZONA HORARIA VENEZUELA =====
 ZONA_HORARIA_VE = timezone(timedelta(hours=-4))
-
 def ahora_ve():
     return datetime.now(ZONA_HORARIA_VE)
 
-# ===== CONFIG TELEGRAM =====
 TELEGRAM_TOKEN = os.environ.get('TELEGRAM_TOKEN', '')
 TELEGRAM_CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID', '')
 
 init_db()
 
 DIAS_ES = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo']
-
-# ========== AUXILIARES ==========
 
 def es_dia_habil(fecha_str):
     try:
@@ -51,9 +46,7 @@ def obtener_usuario_actual():
         cursor.execute('SELECT id, username, rol, barbero_id, activo FROM usuarios WHERE username = %s AND activo = 1', (username,))
         user = cursor.fetchone()
         conn.close()
-        if user:
-            return dict(user)
-        return None
+        return dict(user) if user else None
     except Exception:
         return None
 
@@ -99,7 +92,7 @@ def enviar_telegram(mensaje, chat_id=None):
         logging.error(f"Error Telegram: {e}")
         return False
 
-def calcular_huecos_libres(fecha_str, barbero_id=0):
+def calcular_huecos_libres(fecha_str, barbero_id=0, servicio_id=0):
     conn = get_db()
     cursor = conn.cursor()
     if not es_dia_habil(fecha_str):
@@ -135,11 +128,7 @@ def calcular_huecos_libres(fecha_str, barbero_id=0):
         if DIAS_ES[dia_semana] not in dias:
             conn.close()
             return []
-        cursor.execute('''
-            SELECT 1 FROM bloqueos 
-            WHERE barbero_id = %s AND activo = 1 
-            AND fecha_inicio <= %s AND fecha_fin >= %s
-        ''', (barbero_id, fecha_str, fecha_str))
+        cursor.execute('SELECT 1 FROM bloqueos WHERE barbero_id = %s AND activo = 1 AND fecha_inicio <= %s AND fecha_fin >= %s', (barbero_id, fecha_str, fecha_str))
         if cursor.fetchone():
             conn.close()
             return []
@@ -165,11 +154,7 @@ def calcular_huecos_libres(fecha_str, barbero_id=0):
                 dias = DIAS_ES[:6]
             if dia_actual not in dias:
                 continue
-            cursor.execute('''
-                SELECT 1 FROM bloqueos 
-                WHERE barbero_id = %s AND activo = 1 
-                AND fecha_inicio <= %s AND fecha_fin >= %s
-            ''', (b['id'], fecha_str, fecha_str))
+            cursor.execute('SELECT 1 FROM bloqueos WHERE barbero_id = %s AND activo = 1 AND fecha_inicio <= %s AND fecha_fin >= %s', (b['id'], fecha_str, fecha_str))
             if cursor.fetchone():
                 continue
             barberos_hoy.append(b['id'])
@@ -205,6 +190,34 @@ def listar_barberos_publico():
         barberos = cursor.fetchall()
         conn.close()
         return jsonify([dict(b) for b in barberos])
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/servicios', methods=['GET'])
+def listar_servicios_publico():
+    barbero_id = request.args.get('barbero_id', 0, type=int)
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        if barbero_id > 0:
+            cursor.execute('''
+                SELECT s.id, s.nombre, s.duracion_minutos, s.precio, s.descripcion
+                FROM servicios s
+                JOIN barbero_servicios bs ON bs.servicio_id = s.id
+                WHERE s.activo = 1 AND bs.barbero_id = %s AND bs.activo = 1
+                ORDER BY s.id
+            ''', (barbero_id,))
+        else:
+            cursor.execute('''
+                SELECT DISTINCT s.id, s.nombre, s.duracion_minutos, s.precio, s.descripcion
+                FROM servicios s
+                JOIN barbero_servicios bs ON bs.servicio_id = s.id
+                WHERE s.activo = 1 AND bs.activo = 1
+                ORDER BY s.id
+            ''')
+        servicios = cursor.fetchall()
+        conn.close()
+        return jsonify([dict(s) for s in servicios])
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -295,11 +308,7 @@ def reservar():
                     dias = DIAS_ES[:6]
                 if dia_actual not in dias:
                     continue
-                cursor.execute('''
-                    SELECT 1 FROM bloqueos 
-                    WHERE barbero_id = %s AND activo = 1 
-                    AND fecha_inicio <= %s AND fecha_fin >= %s
-                ''', (b['id'], fecha, fecha))
+                cursor.execute('SELECT 1 FROM bloqueos WHERE barbero_id = %s AND activo = 1 AND fecha_inicio <= %s AND fecha_fin >= %s', (b['id'], fecha, fecha))
                 if cursor.fetchone():
                     continue
                 cursor.execute('''
@@ -330,11 +339,7 @@ def reservar():
             if dia_actual not in dias:
                 conn.close()
                 return jsonify({'error': 'El barbero no trabaja ese día'}), 400
-            cursor.execute('''
-                SELECT 1 FROM bloqueos 
-                WHERE barbero_id = %s AND activo = 1 
-                AND fecha_inicio <= %s AND fecha_fin >= %s
-            ''', (barbero_id, fecha, fecha))
+            cursor.execute('SELECT 1 FROM bloqueos WHERE barbero_id = %s AND activo = 1 AND fecha_inicio <= %s AND fecha_fin >= %s', (barbero_id, fecha, fecha))
             if cursor.fetchone():
                 conn.close()
                 return jsonify({'error': 'El barbero no está disponible'}), 409
@@ -606,6 +611,7 @@ def eliminar_barbero_permanente(barbero_id):
             conn.close()
             return jsonify({'error': f'Tiene {cnt} citas activas. Cancélalas primero.'}), 400
         
+        cursor.execute('DELETE FROM barbero_servicios WHERE barbero_id = %s', (barbero_id,))
         cursor.execute('DELETE FROM usuarios WHERE barbero_id = %s', (barbero_id,))
         cursor.execute('DELETE FROM bloqueos WHERE barbero_id = %s', (barbero_id,))
         cursor.execute('DELETE FROM barberos WHERE id = %s', (barbero_id,))
@@ -619,35 +625,14 @@ def eliminar_barbero_permanente(barbero_id):
 
 # ========== SERVICIOS (ADMIN) ==========
 
-@app.route('/api/servicios', methods=['GET'])
-def listar_servicios_publico():
-    """Lista servicios activos (para el selector del cliente)."""
-    try:
-        conn = get_db()
-        cursor = conn.cursor()
-        cursor.execute('''
-            SELECT id, nombre, duracion_minutos, precio, descripcion
-            FROM servicios WHERE activo = 1
-            ORDER BY id
-        ''')
-        servicios = cursor.fetchall()
-        conn.close()
-        return jsonify([dict(s) for s in servicios])
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
 @app.route('/api/admin/servicios', methods=['GET'])
 def servicios_admin():
-    """Lista todos los servicios (activos e inactivos)."""
     user, error, code = requiere_admin()
     if error: return error, code
     try:
         conn = get_db()
         cursor = conn.cursor()
-        cursor.execute('''
-            SELECT id, nombre, duracion_minutos, precio, descripcion, activo
-            FROM servicios ORDER BY id
-        ''')
+        cursor.execute('SELECT id, nombre, duracion_minutos, precio, descripcion, activo FROM servicios ORDER BY id')
         servicios = cursor.fetchall()
         conn.close()
         return jsonify([dict(s) for s in servicios])
@@ -734,27 +719,72 @@ def actualizar_servicio(servicio_id):
 
 @app.route('/api/admin/servicios/<int:servicio_id>', methods=['DELETE'])
 def eliminar_servicio(servicio_id):
-    """Soft delete: desactiva el servicio."""
     user, error, code = requiere_admin()
     if error: return error, code
     try:
         conn = get_db()
         cursor = conn.cursor()
-        # Verificar si tiene citas asociadas
         cursor.execute('SELECT COUNT(*) as cnt FROM citas WHERE servicio_id = %s', (servicio_id,))
         cnt = cursor.fetchone()['cnt']
         if cnt > 0:
-            # Soft delete si tiene citas
             cursor.execute('UPDATE servicios SET activo = 0 WHERE id = %s', (servicio_id,))
             conn.commit()
             conn.close()
             return jsonify({'mensaje': f'Servicio desactivado (tenía {cnt} citas asociadas)'})
         else:
-            # Delete real si no tiene citas
+            cursor.execute('DELETE FROM barbero_servicios WHERE servicio_id = %s', (servicio_id,))
             cursor.execute('DELETE FROM servicios WHERE id = %s', (servicio_id,))
             conn.commit()
             conn.close()
             return jsonify({'mensaje': 'Servicio eliminado'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# ========== VINCULACIÓN BARBERO-SERVICIOS ==========
+
+@app.route('/api/admin/barberos/<int:barbero_id>/servicios', methods=['GET'])
+def obtener_servicios_barbero(barbero_id):
+    user, error, code = requiere_admin()
+    if error: return error, code
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT s.id, s.nombre, s.duracion_minutos, s.precio, 
+                   COALESCE(bs.activo, 0) as asignado
+            FROM servicios s
+            LEFT JOIN barbero_servicios bs ON bs.servicio_id = s.id AND bs.barbero_id = %s
+            WHERE s.activo = 1
+            ORDER BY s.id
+        ''', (barbero_id,))
+        servicios = cursor.fetchall()
+        conn.close()
+        return jsonify([dict(s) for s in servicios])
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/barberos/<int:barbero_id>/servicios', methods=['PUT'])
+def actualizar_servicios_barbero(barbero_id):
+    user, error, code = requiere_admin()
+    if error: return error, code
+    data = request.json
+    servicios_ids = data.get('servicios_ids', [])
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        # Desactivar todos los servicios del barbero
+        cursor.execute('UPDATE barbero_servicios SET activo = 0 WHERE barbero_id = %s', (barbero_id,))
+        # Activar los seleccionados
+        for sid in servicios_ids:
+            cursor.execute('''
+                INSERT INTO barbero_servicios (barbero_id, servicio_id, activo)
+                VALUES (%s, %s, 1)
+                ON CONFLICT (barbero_id, servicio_id) 
+                DO UPDATE SET activo = 1
+            ''', (barbero_id, sid))
+        conn.commit()
+        conn.close()
+        return jsonify({'mensaje': f'Servicios actualizados para el barbero'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -1206,113 +1236,6 @@ def solicitar_modificacion():
         return jsonify({'mensaje': 'Solicitud enviada', 'nueva_cita_id': nueva_cita_id})
     except Exception as e:
         logging.error(f"Error: {e}")
-        return jsonify({'error': str(e)}), 500
-
-# ========== LIMPIEZA (TEMPORAL) ==========
-
-@app.route('/api/admin/reset-db', methods=['GET', 'POST'])
-def reset_db():
-    """⚠️ TEMPORAL: Limpia toda la BD y recrea datos por defecto."""
-    # Token puede venir por query string (?token=...) o por JSON
-    token = request.args.get('token', '')
-    if not token and request.is_json:
-        data = request.json or {}
-        token = data.get('token', '')
-    if token != 'reset2026':
-        return jsonify({'error': 'Token inválido'}), 403
-    
-    try:
-        conn = get_db()
-        cursor = conn.cursor()
-        
-        # Borrar en orden por FK
-        cursor.execute('DELETE FROM logs_notificaciones')
-        cursor.execute('DELETE FROM citas')
-        cursor.execute('DELETE FROM bloqueos')
-        cursor.execute('DELETE FROM usuarios')
-        cursor.execute('DELETE FROM clientes')
-        cursor.execute('DELETE FROM catalogo')
-        cursor.execute('DELETE FROM servicios')
-        cursor.execute('DELETE FROM barberos')
-        conn.commit()
-        conn.close()
-        
-        # Reiniciar secuencias (PostgreSQL)
-        try:
-            conn2 = get_db()
-            cur2 = conn2.cursor()
-            for tabla in ['logs_notificaciones', 'citas', 'bloqueos', 'usuarios',
-                          'clientes', 'catalogo', 'servicios', 'barberos']:
-                try:
-                    cur2.execute(f"ALTER SEQUENCE {tabla}_id_seq RESTART WITH 1")
-                except Exception:
-                    pass
-            conn2.commit()
-            conn2.close()
-        except Exception as seq_error:
-            logging.warning(f"No se pudieron reiniciar secuencias: {seq_error}")
-        
-        # Recrear datos por defecto
-        init_db()
-        
-        return jsonify({'mensaje': '✅ Base de datos reiniciada correctamente'})
-    except Exception as e:
-        logging.error(f"Error reset: {e}")
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/admin/force-reset', methods=['GET'])
-def force_reset():
-    """⚠️ TEMPORAL: Fuerza reset completo de la BD."""
-    token = request.args.get('token', '')
-    if token != 'reset2026':
-        return jsonify({'error': 'Token inválido'}), 403
-    try:
-        conn = get_db()
-        cursor = conn.cursor()
-        
-        # Borrar todo en orden por FK
-        for tabla in ['logs_notificaciones', 'citas', 'bloqueos', 'usuarios', 'clientes', 'catalogo', 'servicios', 'barberos']:
-            cursor.execute(f'DELETE FROM {tabla}')
-        conn.commit()
-        
-        # Reiniciar secuencias (PostgreSQL)
-        try:
-            for tabla in ['logs_notificaciones', 'citas', 'bloqueos', 'usuarios', 'clientes', 'catalogo', 'servicios', 'barberos']:
-                try:
-                    cursor.execute(f"ALTER SEQUENCE {tabla}_id_seq RESTART WITH 1")
-                except Exception:
-                    pass
-            conn.commit()
-        except Exception as seq_error:
-            logging.warning(f"No se pudieron reiniciar secuencias: {seq_error}")
-        
-        conn.close()
-        
-        # Recrear datos por defecto
-        init_db()
-        
-        # Verificar que se insertaron
-        conn2 = get_db()
-        cur2 = conn2.cursor()
-        cur2.execute('SELECT COUNT(*) as cnt FROM catalogo')
-        total_catalogo = cur2.fetchone()['cnt']
-        cur2.execute('SELECT COUNT(*) as cnt FROM barberos')
-        total_barberos = cur2.fetchone()['cnt']
-        cur2.execute('SELECT COUNT(*) as cnt FROM usuarios')
-        total_usuarios = cur2.fetchone()['cnt']
-        cur2.execute('SELECT COUNT(*) as cnt FROM servicios')
-        total_servicios = cur2.fetchone()['cnt']
-        conn2.close()
-        
-        return jsonify({
-            'mensaje': '✅ Reset forzado completado',
-            'catalogo': total_catalogo,
-            'barberos': total_barberos,
-            'usuarios': total_usuarios,
-            'servicios': total_servicios
-        })
-    except Exception as e:
-        logging.error(f"Error force reset: {e}")
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':

@@ -21,15 +21,12 @@ def get_db():
         return conn
 
 def normalizar_username(nombre):
-    """Convierte un nombre en un username válido: minúsculas, sin acentos, sin espacios."""
     if not nombre:
         return 'barbero'
     nfkd = unicodedata.normalize('NFKD', nombre)
     solo_ascii = nfkd.encode('ASCII', 'ignore').decode('ASCII')
     username = ''.join(c for c in solo_ascii.lower() if c.isalnum())
-    if not username:
-        username = 'barbero'
-    return username
+    return username or 'barbero'
 
 def init_db():
     conn = get_db()
@@ -60,6 +57,19 @@ def init_db():
             precio REAL NOT NULL,
             descripcion TEXT,
             activo INTEGER DEFAULT 1
+        )
+    ''')
+
+    # ===== TABLA BARBERO_SERVICIOS (NUEVA) =====
+    cursor.execute(f'''
+        CREATE TABLE IF NOT EXISTS barbero_servicios (
+            id {id_def},
+            barbero_id INTEGER NOT NULL,
+            servicio_id INTEGER NOT NULL,
+            activo INTEGER DEFAULT 1,
+            UNIQUE (barbero_id, servicio_id),
+            FOREIGN KEY (barbero_id) REFERENCES barberos(id),
+            FOREIGN KEY (servicio_id) REFERENCES servicios(id)
         )
     ''')
 
@@ -232,11 +242,10 @@ def init_db():
         ''', (username, pwd_hash, barbero_id))
         print(f"✅ Usuario: {username} / {password}")
 
-# ===== CATALOGO POR DEFECTO =====
+    # ===== CATALOGO POR DEFECTO =====
     cursor.execute('SELECT COUNT(*) as cnt FROM catalogo')
     if cursor.fetchone()['cnt'] == 0:
         items = [
-            # PRODUCTOS (20)
             ('producto', 'producto1.jpg', 'Producto 1', 'Descripcion del producto 1', '$20.000 COP', 1),
             ('producto', 'producto2.jpg', 'Producto 2', 'Descripcion del producto 2', '$20.000 COP', 2),
             ('producto', 'producto3.jpg', 'Producto 3', 'Descripcion del producto 3', '$20.000 COP', 3),
@@ -257,7 +266,6 @@ def init_db():
             ('producto', 'producto18.jpg', 'Producto 18', 'Descripcion del producto 18', '$20.000 COP', 18),
             ('producto', 'producto19.jpg', 'Producto 19', 'Descripcion del producto 19', '$20.000 COP', 19),
             ('producto', 'producto20.jpg', 'Producto 20', 'Descripcion del producto 20', '$20.000 COP', 20),
-            # CORTES/ESTILOS (6)
             ('estilo', 'corte1.jpg', 'Corte 1', '', '', 1),
             ('estilo', 'corte2.jpg', 'Corte 2', '', '', 2),
             ('estilo', 'corte3.jpg', 'Corte 3', '', '', 3),
@@ -271,6 +279,21 @@ def init_db():
                 VALUES (%s, %s, %s, %s, %s, %s, 1)
             ''', (tipo, archivo, nombre, descripcion, precio, orden))
         print(f"✅ Catalogo por defecto creado ({len(items)} items)")
+
+    # ===== VINCULAR SERVICIOS A BARBEROS (por defecto) =====
+    cursor.execute('SELECT COUNT(*) as cnt FROM barbero_servicios')
+    if cursor.fetchone()['cnt'] == 0:
+        cursor.execute('SELECT id FROM barberos WHERE activo = 1')
+        barberos_ids = [r['id'] for r in cursor.fetchall()]
+        cursor.execute('SELECT id FROM servicios WHERE activo = 1')
+        servicios_ids = [r['id'] for r in cursor.fetchall()]
+        for barbero_id in barberos_ids:
+            for servicio_id in servicios_ids:
+                cursor.execute('''
+                    INSERT INTO barbero_servicios (barbero_id, servicio_id, activo)
+                    VALUES (%s, %s, 1)
+                ''', (barbero_id, servicio_id))
+        print(f"✅ Servicios vinculados a {len(barberos_ids)} barberos")
 
     conn.commit()
     conn.close()
