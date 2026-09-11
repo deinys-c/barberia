@@ -28,13 +28,47 @@ def normalizar_username(nombre):
     username = ''.join(c for c in solo_ascii.lower() if c.isalnum())
     return username or 'barbero'
 
+def columna_existe(cursor, tabla, columna):
+    """Verifica si una columna existe en una tabla."""
+    if USING_POSTGRES:
+        cursor.execute("""
+            SELECT 1 FROM information_schema.columns 
+            WHERE table_name = %s AND column_name = %s
+        """, (tabla, columna))
+        return cursor.fetchone() is not None
+    else:
+        cursor.execute(f"PRAGMA table_info({tabla})")
+        cols = [row[1] for row in cursor.fetchall()]
+        return columna in cols
+
+def agregar_columnas_faltantes(cursor):
+    """Detecta y añade columnas nuevas a tablas existentes."""
+    # ===== servicios: barbero_id =====
+    if not columna_existe(cursor, 'servicios', 'barbero_id'):
+        print("🔧 Migrando: añadiendo servicios.barbero_id")
+        cursor.execute("ALTER TABLE servicios ADD COLUMN barbero_id INTEGER")
+        # Asignar el primer barbero activo a los servicios existentes
+        cursor.execute("SELECT id FROM barberos WHERE activo = 1 LIMIT 1")
+        b = cursor.fetchone()
+        if b:
+            bid = b['id'] if isinstance(b, dict) else b[0]
+            cursor.execute("UPDATE servicios SET barbero_id = %s WHERE barbero_id IS NULL", (bid,))
+    
+    # ===== barberos: hora_inicio / hora_fin =====
+    if not columna_existe(cursor, 'barberos', 'hora_inicio'):
+        print("🔧 Migrando: añadiendo barberos.hora_inicio")
+        cursor.execute("ALTER TABLE barberos ADD COLUMN hora_inicio TEXT DEFAULT '08:00'")
+    if not columna_existe(cursor, 'barberos', 'hora_fin'):
+        print("🔧 Migrando: añadiendo barberos.hora_fin")
+        cursor.execute("ALTER TABLE barberos ADD COLUMN hora_fin TEXT DEFAULT '17:00'")
+
 def init_db():
     conn = get_db()
     cursor = conn.cursor()
     is_postgres = USING_POSTGRES
     id_def = "SERIAL PRIMARY KEY" if is_postgres else "INTEGER PRIMARY KEY AUTOINCREMENT"
 
-    # ===== BARBEROS (con horario propio) =====
+    # ===== CREAR TABLAS SI NO EXISTEN =====
     cursor.execute(f'''
         CREATE TABLE IF NOT EXISTS barberos (
             id {id_def},
@@ -48,21 +82,18 @@ def init_db():
         )
     ''')
 
-    # ===== SERVICIOS (por barbero) =====
     cursor.execute(f'''
         CREATE TABLE IF NOT EXISTS servicios (
             id {id_def},
-            barbero_id INTEGER NOT NULL,
+            barbero_id INTEGER,
             nombre TEXT NOT NULL,
             duracion_minutos INTEGER NOT NULL,
             precio REAL NOT NULL,
             descripcion TEXT,
-            activo INTEGER DEFAULT 1,
-            FOREIGN KEY (barbero_id) REFERENCES barberos(id)
+            activo INTEGER DEFAULT 1
         )
     ''')
 
-    # ===== CLIENTES =====
     cursor.execute(f'''
         CREATE TABLE IF NOT EXISTS clientes (
             id {id_def},
@@ -73,7 +104,6 @@ def init_db():
         )
     ''')
 
-    # ===== CITAS =====
     cursor.execute(f'''
         CREATE TABLE IF NOT EXISTS citas (
             id {id_def},
@@ -88,18 +118,10 @@ def init_db():
             alerta_cierre INTEGER DEFAULT 0,
             cita_original_id INTEGER,
             notas_cliente TEXT,
-            fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (barbero_id) REFERENCES barberos(id),
-            FOREIGN KEY (cliente_id) REFERENCES clientes(id),
-            FOREIGN KEY (servicio_id) REFERENCES servicios(id)
+            fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
 
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_citas_fecha ON citas(fecha)')
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_citas_estado ON citas(estado)')
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_citas_barbero ON citas(barbero_id)')
-
-    # ===== BLOQUEOS =====
     cursor.execute(f'''
         CREATE TABLE IF NOT EXISTS bloqueos (
             id {id_def},
@@ -107,12 +129,10 @@ def init_db():
             fecha_inicio TEXT NOT NULL,
             fecha_fin TEXT NOT NULL,
             motivo TEXT,
-            activo INTEGER DEFAULT 1,
-            FOREIGN KEY (barbero_id) REFERENCES barberos(id)
+            activo INTEGER DEFAULT 1
         )
     ''')
 
-    # ===== LOGS =====
     cursor.execute(f'''
         CREATE TABLE IF NOT EXISTS logs_notificaciones (
             id {id_def},
@@ -120,12 +140,10 @@ def init_db():
             tipo TEXT NOT NULL,
             estado_envio TEXT NOT NULL,
             fecha_envio TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            intentos INTEGER DEFAULT 0,
-            FOREIGN KEY (cita_id) REFERENCES citas(id)
+            intentos INTEGER DEFAULT 0
         )
     ''')
 
-    # ===== USUARIOS =====
     cursor.execute(f'''
         CREATE TABLE IF NOT EXISTS usuarios (
             id {id_def},
@@ -133,12 +151,10 @@ def init_db():
             password_hash TEXT NOT NULL,
             rol TEXT NOT NULL DEFAULT 'barbero',
             barbero_id INTEGER,
-            activo INTEGER DEFAULT 1,
-            FOREIGN KEY (barbero_id) REFERENCES barberos(id)
+            activo INTEGER DEFAULT 1
         )
     ''')
 
-    # ===== CATALOGO =====
     cursor.execute(f'''
         CREATE TABLE IF NOT EXISTS catalogo (
             id {id_def},
@@ -152,6 +168,25 @@ def init_db():
             fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
+
+    conn.commit()
+
+    # ===== MIGRACIÓN: añadir columnas nuevas a tablas existentes =====
+    try:
+        agregar_columnas_faltantes(cursor)
+        conn.commit()
+    except Exception as e:
+        print(f"⚠️ Error en migración: {e}")
+        conn.rollback()
+
+    # ===== ÍNDICES =====
+    try:
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_citas_fecha ON citas(fecha)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_citas_estado ON citas(estado)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_citas_barbero ON citas(barbero_id)')
+        conn.commit()
+    except Exception:
+        conn.rollback()
 
     # ===== DATOS DE PRUEBA =====
     if is_postgres:
@@ -176,7 +211,6 @@ def init_db():
             ''')
             barbero_id = cursor.lastrowid
         
-        # Servicios por defecto PARA ESE BARBERO
         cursor.execute('''
             INSERT INTO servicios (barbero_id, nombre, duracion_minutos, precio) VALUES
             (%s, 'Corte', 45, 25000),
@@ -184,6 +218,7 @@ def init_db():
             (%s, 'Combo (Corte + Barba)', 75, 30000)
         ''', (barbero_id, barbero_id, barbero_id))
         print("✅ Datos de prueba insertados")
+        conn.commit()
 
     # ===== ADMIN =====
     cursor.execute("SELECT 1 FROM usuarios WHERE username = 'admin'")
@@ -200,8 +235,9 @@ def init_db():
                 VALUES ('admin', ?, 'admin', NULL)
             ''', (admin_hash,))
         print("✅ Admin: admin / barberia2026")
+        conn.commit()
 
-    # ===== USUARIOS PARA BARBEROS + SERVICIOS POR DEFECTO =====
+    # ===== USUARIOS + SERVICIOS POR DEFECTO PARA BARBEROS =====
     cursor.execute('SELECT id, nombre FROM barberos WHERE activo = 1')
     barberos = cursor.fetchall()
     
@@ -227,6 +263,7 @@ def init_db():
                 VALUES (%s, %s, 'barbero', %s)
             ''', (username, pwd_hash, barbero_id))
             print(f"✅ Usuario: {username} / {password}")
+            conn.commit()
         
         # Crear servicios por defecto si no tiene
         cursor.execute('SELECT COUNT(*) as cnt FROM servicios WHERE barbero_id = %s', (barbero_id,))
@@ -238,6 +275,7 @@ def init_db():
                 (%s, 'Combo (Corte + Barba)', 75, 30000)
             ''', (barbero_id, barbero_id, barbero_id))
             print(f"✅ Servicios por defecto para {nombre}")
+            conn.commit()
 
     # ===== CATALOGO POR DEFECTO =====
     cursor.execute('SELECT COUNT(*) as cnt FROM catalogo')
@@ -253,6 +291,6 @@ def init_db():
                 VALUES (%s, %s, %s, %s, %s, %s, 1)
             ''', (tipo, archivo, nombre, descripcion, precio, orden))
         print(f"✅ Catalogo por defecto creado ({len(items)} items)")
+        conn.commit()
 
-    conn.commit()
     conn.close()
