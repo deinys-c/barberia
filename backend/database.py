@@ -34,7 +34,7 @@ def init_db():
     is_postgres = USING_POSTGRES
     id_def = "SERIAL PRIMARY KEY" if is_postgres else "INTEGER PRIMARY KEY AUTOINCREMENT"
 
-    # ===== TABLA BARBEROS =====
+    # ===== BARBEROS (con horario propio) =====
     cursor.execute(f'''
         CREATE TABLE IF NOT EXISTS barberos (
             id {id_def},
@@ -48,32 +48,21 @@ def init_db():
         )
     ''')
 
-    # ===== TABLA SERVICIOS =====
+    # ===== SERVICIOS (por barbero) =====
     cursor.execute(f'''
         CREATE TABLE IF NOT EXISTS servicios (
             id {id_def},
+            barbero_id INTEGER NOT NULL,
             nombre TEXT NOT NULL,
             duracion_minutos INTEGER NOT NULL,
             precio REAL NOT NULL,
             descripcion TEXT,
-            activo INTEGER DEFAULT 1
-        )
-    ''')
-
-    # ===== TABLA BARBERO_SERVICIOS (NUEVA) =====
-    cursor.execute(f'''
-        CREATE TABLE IF NOT EXISTS barbero_servicios (
-            id {id_def},
-            barbero_id INTEGER NOT NULL,
-            servicio_id INTEGER NOT NULL,
             activo INTEGER DEFAULT 1,
-            UNIQUE (barbero_id, servicio_id),
-            FOREIGN KEY (barbero_id) REFERENCES barberos(id),
-            FOREIGN KEY (servicio_id) REFERENCES servicios(id)
+            FOREIGN KEY (barbero_id) REFERENCES barberos(id)
         )
     ''')
 
-    # ===== TABLA CLIENTES =====
+    # ===== CLIENTES =====
     cursor.execute(f'''
         CREATE TABLE IF NOT EXISTS clientes (
             id {id_def},
@@ -84,7 +73,7 @@ def init_db():
         )
     ''')
 
-    # ===== TABLA CITAS =====
+    # ===== CITAS =====
     cursor.execute(f'''
         CREATE TABLE IF NOT EXISTS citas (
             id {id_def},
@@ -109,9 +98,8 @@ def init_db():
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_citas_fecha ON citas(fecha)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_citas_estado ON citas(estado)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_citas_barbero ON citas(barbero_id)')
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_citas_cliente ON citas(cliente_id)')
 
-    # ===== TABLA BLOQUEOS =====
+    # ===== BLOQUEOS =====
     cursor.execute(f'''
         CREATE TABLE IF NOT EXISTS bloqueos (
             id {id_def},
@@ -124,7 +112,7 @@ def init_db():
         )
     ''')
 
-    # ===== TABLA LOGS =====
+    # ===== LOGS =====
     cursor.execute(f'''
         CREATE TABLE IF NOT EXISTS logs_notificaciones (
             id {id_def},
@@ -137,7 +125,7 @@ def init_db():
         )
     ''')
 
-    # ===== TABLA USUARIOS =====
+    # ===== USUARIOS =====
     cursor.execute(f'''
         CREATE TABLE IF NOT EXISTS usuarios (
             id {id_def},
@@ -150,7 +138,7 @@ def init_db():
         )
     ''')
 
-    # ===== TABLA CATALOGO =====
+    # ===== CATALOGO =====
     cursor.execute(f'''
         CREATE TABLE IF NOT EXISTS catalogo (
             id {id_def},
@@ -176,27 +164,28 @@ def init_db():
     if not existe:
         if is_postgres:
             cursor.execute('''
-                INSERT INTO barberos (nombre, telefono, email) 
-                VALUES ('Barbero Principal', '123456789', 'barbero@barberia.com')
+                INSERT INTO barberos (nombre, telefono, email, hora_inicio, hora_fin) 
+                VALUES ('Barbero Principal', '123456789', 'barbero@barberia.com', '08:00', '17:00')
                 RETURNING id
             ''')
             barbero_id = cursor.fetchone()['id']
         else:
             cursor.execute('''
-                INSERT INTO barberos (nombre, telefono, email) 
-                VALUES ('Barbero Principal', '123456789', 'barbero@barberia.com')
+                INSERT INTO barberos (nombre, telefono, email, hora_inicio, hora_fin) 
+                VALUES ('Barbero Principal', '123456789', 'barbero@barberia.com', '08:00', '17:00')
             ''')
             barbero_id = cursor.lastrowid
         
+        # Servicios por defecto PARA ESE BARBERO
         cursor.execute('''
-            INSERT INTO servicios (nombre, duracion_minutos, precio) VALUES
-            ('Corte', 45, 25000),
-            ('Barba', 30, 15000),
-            ('Combo (Corte + Barba)', 75, 30000)
-        ''')
+            INSERT INTO servicios (barbero_id, nombre, duracion_minutos, precio) VALUES
+            (%s, 'Corte', 45, 25000),
+            (%s, 'Barba', 30, 15000),
+            (%s, 'Combo (Corte + Barba)', 75, 30000)
+        ''', (barbero_id, barbero_id, barbero_id))
         print("✅ Datos de prueba insertados")
 
-    # ===== ADMIN USER =====
+    # ===== ADMIN =====
     cursor.execute("SELECT 1 FROM usuarios WHERE username = 'admin'")
     if not cursor.fetchone():
         admin_hash = generate_password_hash('barberia2026')
@@ -212,7 +201,7 @@ def init_db():
             ''', (admin_hash,))
         print("✅ Admin: admin / barberia2026")
 
-    # ===== USUARIOS PARA BARBEROS =====
+    # ===== USUARIOS PARA BARBEROS + SERVICIOS POR DEFECTO =====
     cursor.execute('SELECT id, nombre FROM barberos WHERE activo = 1')
     barberos = cursor.fetchall()
     
@@ -221,79 +210,49 @@ def init_db():
         nombre = b['nombre']
         
         cursor.execute('SELECT 1 FROM usuarios WHERE barbero_id = %s', (barbero_id,))
-        if cursor.fetchone():
-            continue
+        if not cursor.fetchone():
+            username = normalizar_username(nombre)
+            base_username = username
+            contador = 2
+            while True:
+                cursor.execute('SELECT 1 FROM usuarios WHERE username = %s', (username,))
+                if not cursor.fetchone():
+                    break
+                username = f"{base_username}{contador}"
+                contador += 1
+            password = f"{username}123"
+            pwd_hash = generate_password_hash(password)
+            cursor.execute('''
+                INSERT INTO usuarios (username, password_hash, rol, barbero_id)
+                VALUES (%s, %s, 'barbero', %s)
+            ''', (username, pwd_hash, barbero_id))
+            print(f"✅ Usuario: {username} / {password}")
         
-        username = normalizar_username(nombre)
-        base_username = username
-        contador = 2
-        while True:
-            cursor.execute('SELECT 1 FROM usuarios WHERE username = %s', (username,))
-            if not cursor.fetchone():
-                break
-            username = f"{base_username}{contador}"
-            contador += 1
-        
-        password = f"{username}123"
-        pwd_hash = generate_password_hash(password)
-        cursor.execute('''
-            INSERT INTO usuarios (username, password_hash, rol, barbero_id)
-            VALUES (%s, %s, 'barbero', %s)
-        ''', (username, pwd_hash, barbero_id))
-        print(f"✅ Usuario: {username} / {password}")
+        # Crear servicios por defecto si no tiene
+        cursor.execute('SELECT COUNT(*) as cnt FROM servicios WHERE barbero_id = %s', (barbero_id,))
+        if cursor.fetchone()['cnt'] == 0:
+            cursor.execute('''
+                INSERT INTO servicios (barbero_id, nombre, duracion_minutos, precio) VALUES
+                (%s, 'Corte', 45, 25000),
+                (%s, 'Barba', 30, 15000),
+                (%s, 'Combo (Corte + Barba)', 75, 30000)
+            ''', (barbero_id, barbero_id, barbero_id))
+            print(f"✅ Servicios por defecto para {nombre}")
 
     # ===== CATALOGO POR DEFECTO =====
     cursor.execute('SELECT COUNT(*) as cnt FROM catalogo')
     if cursor.fetchone()['cnt'] == 0:
-        items = [
-            ('producto', 'producto1.jpg', 'Producto 1', 'Descripcion del producto 1', '$20.000 COP', 1),
-            ('producto', 'producto2.jpg', 'Producto 2', 'Descripcion del producto 2', '$20.000 COP', 2),
-            ('producto', 'producto3.jpg', 'Producto 3', 'Descripcion del producto 3', '$20.000 COP', 3),
-            ('producto', 'producto4.jpg', 'Producto 4', 'Descripcion del producto 4', '$20.000 COP', 4),
-            ('producto', 'producto5.jpg', 'Producto 5', 'Descripcion del producto 5', '$20.000 COP', 5),
-            ('producto', 'producto6.jpg', 'Producto 6', 'Descripcion del producto 6', '$20.000 COP', 6),
-            ('producto', 'producto7.jpg', 'Producto 7', 'Descripcion del producto 7', '$20.000 COP', 7),
-            ('producto', 'producto8.jpg', 'Producto 8', 'Descripcion del producto 8', '$20.000 COP', 8),
-            ('producto', 'producto9.jpg', 'Producto 9', 'Descripcion del producto 9', '$20.000 COP', 9),
-            ('producto', 'producto10.jpg', 'Producto 10', 'Descripcion del producto 10', '$20.000 COP', 10),
-            ('producto', 'producto11.jpg', 'Producto 11', 'Descripcion del producto 11', '$20.000 COP', 11),
-            ('producto', 'producto12.jpg', 'Producto 12', 'Descripcion del producto 12', '$20.000 COP', 12),
-            ('producto', 'producto13.jpg', 'Producto 13', 'Descripcion del producto 13', '$20.000 COP', 13),
-            ('producto', 'producto14.jpg', 'Producto 14', 'Descripcion del producto 14', '$20.000 COP', 14),
-            ('producto', 'producto15.jpg', 'Producto 15', 'Descripcion del producto 15', '$20.000 COP', 15),
-            ('producto', 'producto16.jpg', 'Producto 16', 'Descripcion del producto 16', '$20.000 COP', 16),
-            ('producto', 'producto17.jpg', 'Producto 17', 'Descripcion del producto 17', '$20.000 COP', 17),
-            ('producto', 'producto18.jpg', 'Producto 18', 'Descripcion del producto 18', '$20.000 COP', 18),
-            ('producto', 'producto19.jpg', 'Producto 19', 'Descripcion del producto 19', '$20.000 COP', 19),
-            ('producto', 'producto20.jpg', 'Producto 20', 'Descripcion del producto 20', '$20.000 COP', 20),
-            ('estilo', 'corte1.jpg', 'Corte 1', '', '', 1),
-            ('estilo', 'corte2.jpg', 'Corte 2', '', '', 2),
-            ('estilo', 'corte3.jpg', 'Corte 3', '', '', 3),
-            ('estilo', 'corte4.jpg', 'Corte 4', '', '', 4),
-            ('estilo', 'corte5.jpg', 'Corte 5', '', '', 5),
-            ('estilo', 'corte6.jpg', 'Corte 6', '', '', 6),
-        ]
+        items = []
+        for i in range(1, 21):
+            items.append(('producto', f'producto{i}.jpg', f'Producto {i}', f'Descripcion del producto {i}', '$20.000 COP', i))
+        for i in range(1, 7):
+            items.append(('estilo', f'corte{i}.jpg', f'Corte {i}', '', '', i))
         for tipo, archivo, nombre, descripcion, precio, orden in items:
             cursor.execute('''
                 INSERT INTO catalogo (tipo, archivo, nombre, descripcion, precio, orden, activo)
                 VALUES (%s, %s, %s, %s, %s, %s, 1)
             ''', (tipo, archivo, nombre, descripcion, precio, orden))
         print(f"✅ Catalogo por defecto creado ({len(items)} items)")
-
-    # ===== VINCULAR SERVICIOS A BARBEROS (por defecto) =====
-    cursor.execute('SELECT COUNT(*) as cnt FROM barbero_servicios')
-    if cursor.fetchone()['cnt'] == 0:
-        cursor.execute('SELECT id FROM barberos WHERE activo = 1')
-        barberos_ids = [r['id'] for r in cursor.fetchall()]
-        cursor.execute('SELECT id FROM servicios WHERE activo = 1')
-        servicios_ids = [r['id'] for r in cursor.fetchall()]
-        for barbero_id in barberos_ids:
-            for servicio_id in servicios_ids:
-                cursor.execute('''
-                    INSERT INTO barbero_servicios (barbero_id, servicio_id, activo)
-                    VALUES (%s, %s, 1)
-                ''', (barbero_id, servicio_id))
-        print(f"✅ Servicios vinculados a {len(barberos_ids)} barberos")
 
     conn.commit()
     conn.close()
