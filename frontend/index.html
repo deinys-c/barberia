@@ -27,39 +27,14 @@
         <button onclick="cambiarTabCliente('estilos')">Estilos</button>
     </div>
 
-    <!-- TAB: SERVICIOS (solo admin) -->
-<div id="tabServicios" class="panel-tab" style="display:none;">
-    <h3>Gestion de Servicios</h3>
-    <button class="btn" onclick="abrirFormServicio()">+ Nuevo Servicio</button>
-    
-    <div id="formServicio" style="display:none; background:rgba(255,255,255,0.03); padding:20px; border-radius:8px; margin-top:15px;">
-        <input type="hidden" id="servicioEditId">
-        <div class="row">
-            <div><label>Nombre *</label><input type="text" id="servicioNombre" placeholder="Ej: Corte" maxlength="100"></div>
-            <div><label>Duracion (minutos) *</label><input type="number" id="servicioDuracion" placeholder="45" min="5" max="480"></div>
-        </div>
-        <div class="row">
-            <div><label>Precio (COP) *</label><input type="number" id="servicioPrecio" placeholder="25000" min="0" step="1000"></div>
-            <div><label>Descripcion (opcional)</label><input type="text" id="servicioDescripcion" placeholder="Breve descripcion" maxlength="200"></div>
-        </div>
-        <div style="margin-top:15px;">
-            <button class="btn" onclick="guardarServicio()">Guardar</button>
-            <button class="btn btn-secundario" onclick="cerrarFormServicio()">Cancelar</button>
-        </div>
-        <div id="mensajeServicio" class="mensaje"></div>
-    </div>
-    
-    <div id="listaServicios" style="margin-top:20px;"></div>
-</div>
-
     <div id="tabsBarbero" class="tabs" style="display:none;">
-    <button class="activo" onclick="cambiarTabBarbero('pendientes')">Pendientes</button>
-    <button onclick="cambiarTabBarbero('historial')">Historial</button>
-    <button onclick="cambiarTabBarbero('barberos')" class="solo-admin" style="display:none;">Barberos</button>
-    <button onclick="cambiarTabBarbero('servicios')" class="solo-admin" style="display:none;">Servicios</button>
-    <button onclick="cambiarTabBarbero('catalogo')" class="solo-admin" style="display:none;">Catalogo</button>
-    <button onclick="cambiarTabBarbero('configuracion')">Configuracion</button>
-</div>
+        <button class="activo" onclick="cambiarTabBarbero('pendientes')">Pendientes</button>
+        <button onclick="cambiarTabBarbero('historial')">Historial</button>
+        <button onclick="cambiarTabBarbero('barberos')" class="solo-admin" style="display:none;">Barberos</button>
+        <button onclick="cambiarTabBarbero('servicios')">Servicios</button>
+        <button onclick="cambiarTabBarbero('catalogo')" class="solo-admin" style="display:none;">Catalogo</button>
+        <button onclick="cambiarTabBarbero('configuracion')">Configuracion</button>
+    </div>
 
     <!-- PANEL CLIENTE -->
     <div id="panelCliente" class="panel activo">
@@ -68,15 +43,11 @@
             <div class="row">
                 <div>
                     <label>Servicio</label>
-                    <select id="servicio">
-                        <option value="1">Corte (45min - $25.000 COP)</option>
-                        <option value="2">Barba (30min - $15.000 COP)</option>
-                        <option value="3">Combo (75min - $30.000 COP)</option>
-                    </select>
+                    <select id="servicio"><option value="">Selecciona un barbero primero</option></select>
                 </div>
                 <div>
                     <label>Barbero</label>
-                    <select id="barbero"><option value="0">Cualquiera disponible</option></select>
+                    <select id="barbero" onchange="alCambiarBarbero()"><option value="0">Cualquiera disponible</option></select>
                 </div>
                 <div>
                     <label>Fecha</label>
@@ -134,6 +105,7 @@
                 <button class="btn btn-secundario" onclick="logoutBarbero()">Cerrar sesion</button>
             </div>
 
+            <!-- PENDIENTES -->
             <div id="tabPendientes" class="panel-tab activo">
                 <h3>Solicitudes Pendientes</h3>
                 <div class="filtros-container" id="filtrosPendientes">
@@ -148,6 +120,7 @@
                 <div id="pendientesLista" style="margin-top:15px;"></div>
             </div>
 
+            <!-- HISTORIAL -->
             <div id="tabHistorial" class="panel-tab" style="display:none;">
                 <h3>Historial de Citas</h3>
                 <div class="filtros-container" id="filtrosHistorial">
@@ -162,6 +135,7 @@
                 <div id="historialLista" style="margin-top:15px;"></div>
             </div>
 
+            <!-- BARBEROS (solo admin) -->
             <div id="tabBarberos" class="panel-tab" style="display:none;">
                 <h3>Gestion de Barberos</h3>
                 <button class="btn" onclick="abrirFormBarbero()">+ Nuevo Barbero</button>
@@ -174,6 +148,10 @@
                     </div>
                     <label>Email</label>
                     <input type="email" id="barberoEmail" maxlength="100">
+                    <div class="row">
+                        <div><label>Hora inicio</label><input type="time" id="barberoHoraInicio" value="08:00"></div>
+                        <div><label>Hora fin</label><input type="time" id="barberoHoraFin" value="17:00"></div>
+                    </div>
                     <div class="info-nota">
                         <strong>Nota:</strong> El usuario y contraseña se generan automáticamente.<br>
                         Ej: <code>Pepe</code> → usuario <code>pepe</code>, contraseña <code>pepe123</code>
@@ -197,46 +175,40 @@
                 <div id="listaBarberos" style="margin-top:20px;"></div>
             </div>
 
-            <!-- TAB: SERVICIOS (solo admin) -->
-<div id="tabServicios" class="panel-tab" style="display:none;">
-    <h3>Gestion de Servicios</h3>
-    <button class="btn" onclick="abrirFormServicio()">+ Nuevo Servicio</button>
-    
-    <div id="formServicio" style="display:none; background:rgba(255,255,255,0.03); padding:20px; border-radius:8px; margin-top:15px;">
-        <input type="hidden" id="servicioEditId">
-        <div class="row">
-            <div>
-                <label>Nombre *</label>
-                <input type="text" id="servicioNombre" placeholder="Ej: Corte" maxlength="100">
-            </div>
-            <div>
-                <label>Duracion (minutos) *</label>
-                <input type="number" id="servicioDuracion" placeholder="45" min="5" max="480">
-            </div>
-        </div>
-        <div class="row">
-            <div>
-                <label>Precio (COP) *</label>
-                <input type="number" id="servicioPrecio" placeholder="25000" min="0" step="1000">
-            </div>
-            <div>
-                <label>Descripcion (opcional)</label>
-                <input type="text" id="servicioDescripcion" placeholder="Breve descripcion" maxlength="200">
-            </div>
-        </div>
-        <div class="info-nota">
-            <strong>Ejemplo:</strong> Corte → 45 min → 25000 → "Corte clasico con maquina y tijera"
-        </div>
-        <div style="margin-top:15px;">
-            <button class="btn" onclick="guardarServicio()">Guardar</button>
-            <button class="btn btn-secundario" onclick="cerrarFormServicio()">Cancelar</button>
-        </div>
-        <div id="mensajeServicio" class="mensaje"></div>
-    </div>
-    
-    <div id="listaServicios" style="margin-top:20px;"></div>
-</div>
+            <!-- SERVICIOS -->
+            <div id="tabServicios" class="panel-tab" style="display:none;">
+                <h3>Gestion de Servicios</h3>
+                
+                <div class="filtros-container" id="filtrosServicios">
+                    <div>
+                        <label>Barbero</label>
+                        <select id="serviciosBarberoSelect" onchange="cargarServiciosAdmin()"></select>
+                    </div>
+                </div>
 
+                <button class="btn" onclick="abrirFormServicio()">+ Nuevo Servicio</button>
+                
+                <div id="formServicio" style="display:none; background:rgba(255,255,255,0.03); padding:20px; border-radius:8px; margin-top:15px;">
+                    <input type="hidden" id="servicioEditId">
+                    <div class="row">
+                        <div><label>Nombre *</label><input type="text" id="servicioNombre" placeholder="Ej: Corte" maxlength="100"></div>
+                        <div><label>Duracion (minutos) *</label><input type="number" id="servicioDuracion" placeholder="45" min="5" max="480"></div>
+                    </div>
+                    <div class="row">
+                        <div><label>Precio (COP) *</label><input type="number" id="servicioPrecio" placeholder="25000" min="0" step="1000"></div>
+                        <div><label>Descripcion (opcional)</label><input type="text" id="servicioDescripcion" placeholder="Breve descripcion" maxlength="200"></div>
+                    </div>
+                    <div style="margin-top:15px;">
+                        <button class="btn" onclick="guardarServicio()">Guardar</button>
+                        <button class="btn btn-secundario" onclick="cerrarFormServicio()">Cancelar</button>
+                    </div>
+                    <div id="mensajeServicio" class="mensaje"></div>
+                </div>
+                
+                <div id="listaServicios" style="margin-top:20px;"></div>
+            </div>
+
+            <!-- CATALOGO (solo admin) -->
             <div id="tabCatalogo" class="panel-tab" style="display:none;">
                 <h3>Catalogo: Productos y Estilos</h3>
                 <button class="btn" onclick="abrirFormItem()">+ Nuevo Item</button>
@@ -251,10 +223,7 @@
                                 <option value="estilo">Estilo (Corte)</option>
                             </select>
                         </div>
-                        <div>
-                            <label>Archivo *</label>
-                            <input type="text" id="itemArchivo" placeholder="producto1.jpg" maxlength="100">
-                        </div>
+                        <div><label>Archivo *</label><input type="text" id="itemArchivo" placeholder="producto1.jpg" maxlength="100"></div>
                     </div>
                     <div class="row">
                         <div><label>Nombre *</label><input type="text" id="itemNombre" maxlength="100"></div>
@@ -264,9 +233,6 @@
                     <input type="text" id="itemDescripcion" maxlength="200">
                     <label>Orden (numero)</label>
                     <input type="number" id="itemOrden" value="0" min="0" max="999">
-                    <div class="info-nota">
-                        <strong>Importante:</strong> La imagen debe estar en <code>frontend/imagenes/productos/</code> o <code>frontend/imagenes/cortes/</code> con el nombre exacto.
-                    </div>
                     <div style="margin-top:15px;">
                         <button class="btn" onclick="guardarItem()">Guardar</button>
                         <button class="btn btn-secundario" onclick="cerrarFormItem()">Cancelar</button>
@@ -277,6 +243,7 @@
                 <div id="listaCatalogo" style="margin-top:20px;"></div>
             </div>
 
+            <!-- CONFIGURACION -->
             <div id="tabConfiguracion" class="panel-tab" style="display:none;">
                 <h3>Configuracion</h3>
                 <div style="background:rgba(255,255,255,0.03); padding:20px; border-radius:8px;">

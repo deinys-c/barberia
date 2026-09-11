@@ -24,7 +24,7 @@ window.imgError = function(img, nombre, tipo) {
     img.src = imgFallback(nombre, tipo);
 };
 
-// ===== PRODUCTOS Y ESTILOS =====
+// ===== CATALOGO (Productos y Estilos) =====
 async function cargarProductos() {
     const contenedor = document.getElementById('productosContainer');
     if (!contenedor) return;
@@ -34,10 +34,7 @@ async function cargarProductos() {
         const items = await res.json();
         const productos = items.filter(i => i.tipo === 'producto');
         contenedor.innerHTML = '';
-        if (!productos.length) {
-            contenedor.innerHTML = '<div class="sin-huecos">No hay productos.</div>';
-            return;
-        }
+        if (!productos.length) { contenedor.innerHTML = '<div class="sin-huecos">No hay productos.</div>'; return; }
         productos.forEach(p => {
             const card = document.createElement('div');
             card.className = 'producto-card';
@@ -51,7 +48,6 @@ async function cargarProductos() {
             contenedor.appendChild(card);
         });
     } catch (error) {
-        console.error('Error:', error);
         contenedor.innerHTML = '<div class="sin-huecos">Error al cargar.</div>';
     }
 }
@@ -65,10 +61,7 @@ async function cargarEstilos() {
         const items = await res.json();
         const estilos = items.filter(i => i.tipo === 'estilo');
         contenedor.innerHTML = '';
-        if (!estilos.length) {
-            contenedor.innerHTML = '<div class="sin-huecos">No hay estilos.</div>';
-            return;
-        }
+        if (!estilos.length) { contenedor.innerHTML = '<div class="sin-huecos">No hay estilos.</div>'; return; }
         estilos.forEach(e => {
             const card = document.createElement('div');
             card.className = 'estilo-card';
@@ -80,12 +73,11 @@ async function cargarEstilos() {
             contenedor.appendChild(card);
         });
     } catch (error) {
-        console.error('Error:', error);
         contenedor.innerHTML = '<div class="sin-huecos">Error al cargar.</div>';
     }
 }
 
-// ===== AUTENTICACIÓN =====
+// ===== AUTENTICACION =====
 function getAuthHeaders() {
     const headers = { 'Content-Type': 'application/json', 'Accept': 'application/json' };
     if (currentUser && currentUser.username) headers['X-Username'] = currentUser.username;
@@ -115,19 +107,9 @@ function esAdmin() {
 
 function actualizarUISegunRol() {
     const admin = esAdmin();
-    
-    // Forzar visibilidad de tabs solo-admin
     document.querySelectorAll('.solo-admin').forEach(el => {
-        if (admin) {
-            el.style.setProperty('display', 'inline-block', 'important');
-        } else {
-            el.style.setProperty('display', 'none', 'important');
-        }
+        el.style.setProperty('display', admin ? 'inline-block' : 'none', 'important');
     });
-    
-    const tabConfig = document.querySelector('#tabsBarbero button:last-child');
-    if (tabConfig) tabConfig.textContent = admin ? 'Configuracion' : 'Bloquear dias';
-    
     const filtrosP = document.getElementById('filtrosPendientes');
     const filtrosH = document.getElementById('filtrosHistorial');
     const filaSel = document.getElementById('filaSelectorBloqueo');
@@ -170,6 +152,7 @@ async function loginUsuario() {
             msg.style.display = 'none';
             actualizarUISegunRol();
             cargarBarberosSelectorAdmin();
+            cargarServiciosSelectorAdmin();
             cargarPendientes();
         } else {
             msg.className = 'mensaje error';
@@ -189,6 +172,7 @@ function verificarSesion() {
         contenido.style.display = 'block';
         actualizarUISegunRol();
         cargarBarberosSelectorAdmin();
+        cargarServiciosSelectorAdmin();
         cargarPendientes();
     } else {
         login.style.display = 'block';
@@ -250,9 +234,8 @@ function cambiarTabBarbero(tab) {
         cargarBarberos(); cargarBarberosSelectorAdmin();
     }
     else if (tab === 'servicios') {
-        if (!esAdmin()) { alert('Solo admin'); return; }
         b[3].classList.add('activo'); document.getElementById('tabServicios').style.display = 'block';
-        cargarServiciosAdmin();
+        cargarServiciosSelectorAdmin(); cargarServiciosAdmin();
     }
     else if (tab === 'catalogo') {
         if (!esAdmin()) { alert('Solo admin'); return; }
@@ -266,14 +249,60 @@ function cambiarTabBarbero(tab) {
 }
 
 // ===== RESERVAR =====
+async function cargarBarberosCliente() {
+    try {
+        const res = await fetch(`${API_URL}/api/barberos`);
+        const bs = await res.json();
+        const sel = document.getElementById('barbero');
+        if (!sel) return;
+        sel.innerHTML = '<option value="0">Cualquiera disponible</option>';
+        bs.forEach(b => {
+            const o = document.createElement('option');
+            o.value = b.id; o.textContent = b.nombre;
+            sel.appendChild(o);
+        });
+    } catch (e) {}
+}
+
+async function alCambiarBarbero() {
+    const barberoId = parseInt(document.getElementById('barbero').value) || 0;
+    const sel = document.getElementById('servicio');
+    if (!sel) return;
+    if (barberoId === 0) {
+        // Mostrar mensaje y deshabilitar
+        sel.innerHTML = '<option value="">Selecciona un barbero específico</option>';
+        return;
+    }
+    sel.innerHTML = '<option value="">Cargando...</option>';
+    try {
+        const res = await fetch(`${API_URL}/api/servicios?barbero_id=${barberoId}`);
+        const servicios = await res.json();
+        sel.innerHTML = '';
+        if (!servicios.length) {
+            sel.innerHTML = '<option value="">Este barbero no tiene servicios</option>';
+            return;
+        }
+        servicios.forEach(s => {
+            const o = document.createElement('option');
+            o.value = s.id;
+            o.textContent = `${s.nombre} (${s.duracion_minutos}min - $${Number(s.precio).toLocaleString('es-CO')} COP)`;
+            sel.appendChild(o);
+        });
+    } catch (e) {
+        sel.innerHTML = '<option value="">Error al cargar</option>';
+    }
+}
+
 async function cargarHuecos() {
     const fecha = document.getElementById('fecha').value;
     const barberoId = document.getElementById('barbero').value || 0;
+    const servicioId = document.getElementById('servicio').value || 0;
     if (!fecha) { alert('Selecciona fecha'); return; }
+    if (!servicioId) { alert('Selecciona un servicio'); return; }
     const c = document.getElementById('huecos');
     c.innerHTML = '<div class="sin-huecos">Cargando...</div>';
     try {
-        const res = await fetch(`${API_URL}/api/disponibilidad?fecha=${encodeURIComponent(fecha)}&barbero_id=${barberoId}`);
+        const res = await fetch(`${API_URL}/api/disponibilidad?fecha=${encodeURIComponent(fecha)}&barbero_id=${barberoId}&servicio_id=${servicioId}`);
         if (!res.ok) throw new Error();
         const data = await res.json();
         c.innerHTML = '';
@@ -307,6 +336,7 @@ async function reservar() {
     const notas = document.getElementById('notas').value.trim();
     if (!nombre) { alert('Nombre obligatorio'); return; }
     if (!horaSeleccionada) { alert('Selecciona hora'); return; }
+    if (!servicio) { alert('Selecciona servicio'); return; }
     const msg = document.getElementById('mensajeReserva');
     msg.className = 'mensaje info';
     msg.textContent = 'Procesando...';
@@ -545,6 +575,8 @@ function abrirFormBarbero() {
     document.getElementById('barberoNombre').value = '';
     document.getElementById('barberoTelefono').value = '';
     document.getElementById('barberoEmail').value = '';
+    document.getElementById('barberoHoraInicio').value = '08:00';
+    document.getElementById('barberoHoraFin').value = '17:00';
     document.querySelectorAll('.dia-check').forEach(c => c.checked = true);
     document.getElementById('mensajeBarbero').style.display = 'none';
 }
@@ -561,6 +593,8 @@ async function guardarBarbero() {
         nombre,
         telefono: document.getElementById('barberoTelefono').value.trim(),
         email: document.getElementById('barberoEmail').value.trim(),
+        hora_inicio: document.getElementById('barberoHoraInicio').value,
+        hora_fin: document.getElementById('barberoHoraFin').value,
         dias_trabajo: dias
     };
     const url = id ? `${API_URL}/api/admin/barberos/${id}` : `${API_URL}/api/admin/barberos`;
@@ -577,7 +611,7 @@ async function guardarBarbero() {
                 cerrarFormBarbero();
                 cargarBarberos();
                 cargarBarberosSelectorAdmin();
-                cargarBarberosSelectorCliente();
+                cargarBarberosCliente();
             }, 2500);
         }
     } catch (e) { alert('Error.'); }
@@ -608,7 +642,7 @@ async function cargarBarberos() {
                 <div class="info">
                     <div class="fecha-hora">${escaparHTML(b.nombre)}</div>
                     <div class="cliente">${escaparHTML(b.telefono || 'Sin tel')} - ${escaparHTML(b.email || 'Sin email')}</div>
-                    <div class="barbero-info">Estado: ${b.activo ? 'Activo' : 'Inactivo'}</div>
+                    <div class="barbero-info">Horario: ${escaparHTML(b.hora_inicio || '08:00')} - ${escaparHTML(b.hora_fin || '17:00')} | Estado: ${b.activo ? 'Activo' : 'Inactivo'}</div>
                 </div>
                 <div class="acciones">${botones}</div>
             `;
@@ -627,6 +661,8 @@ async function editarBarbero(id) {
         document.getElementById('barberoNombre').value = b.nombre || '';
         document.getElementById('barberoTelefono').value = b.telefono || '';
         document.getElementById('barberoEmail').value = b.email || '';
+        document.getElementById('barberoHoraInicio').value = b.hora_inicio || '08:00';
+        document.getElementById('barberoHoraFin').value = b.hora_fin || '17:00';
         let dias = [];
         try { dias = JSON.parse(b.dias_trabajo); } catch (e) {}
         document.querySelectorAll('.dia-check').forEach(c => c.checked = dias.includes(c.value));
@@ -643,7 +679,7 @@ async function desactivarBarbero(id) {
         });
         const d = await res.json();
         alert(d.mensaje || d.error);
-        if (res.ok) { cargarBarberos(); cargarBarberosSelectorAdmin(); cargarBarberosSelectorCliente(); }
+        if (res.ok) { cargarBarberos(); cargarBarberosSelectorAdmin(); cargarBarberosCliente(); }
     } catch (e) { alert('Error.'); }
 }
 
@@ -656,25 +692,8 @@ async function eliminarBarberoPermanente(id) {
         });
         const d = await res.json();
         alert(d.mensaje || d.error);
-        if (res.ok) { cargarBarberos(); cargarBarberosSelectorAdmin(); cargarBarberosSelectorCliente(); }
+        if (res.ok) { cargarBarberos(); cargarBarberosSelectorAdmin(); cargarBarberosCliente(); }
     } catch (e) { alert('Error.'); }
-}
-
-async function cargarBarberosSelectorCliente() {
-    try {
-        const res = await fetch(`${API_URL}/api/barberos`);
-        const bs = await res.json();
-        const sel = document.getElementById('barbero');
-        if (!sel) return;
-        const val = sel.value;
-        sel.innerHTML = '<option value="0">Cualquiera disponible</option>';
-        bs.forEach(b => {
-            const o = document.createElement('option');
-            o.value = b.id; o.textContent = b.nombre;
-            sel.appendChild(o);
-        });
-        if (val) sel.value = val;
-    } catch (e) {}
 }
 
 async function cargarBarberosSelectorAdmin() {
@@ -707,6 +726,153 @@ async function cargarBarberosSelectorAdmin() {
             }
         }
     } catch (e) {}
+}
+
+// ===== SERVICIOS (ADMIN) =====
+async function cargarServiciosSelectorAdmin() {
+    const sel = document.getElementById('serviciosBarberoSelect');
+    if (!sel) return;
+    try {
+        // Si es admin, mostrar todos los barberos
+        if (esAdmin()) {
+            const res = await fetch(`${API_URL}/api/admin/barberos`, { headers: getAuthHeaders() });
+            const bs = (await res.json()).filter(b => b.activo);
+            const val = sel.value;
+            sel.innerHTML = '';
+            bs.forEach(b => {
+                const o = document.createElement('option');
+                o.value = b.id; o.textContent = b.nombre;
+                sel.appendChild(o);
+            });
+            if (val) sel.value = val;
+        } else {
+            // Si es barbero, solo su propio nombre
+            const o = document.createElement('option');
+            o.value = currentUser.barbero_id;
+            o.textContent = 'Mis servicios';
+            sel.innerHTML = '';
+            sel.appendChild(o);
+            sel.parentElement.style.display = 'none';
+        }
+    } catch (e) {}
+}
+
+async function cargarServiciosAdmin() {
+    const c = document.getElementById('listaServicios');
+    if (!c) return;
+    const selBarbero = document.getElementById('serviciosBarberoSelect');
+    const barberoId = selBarbero?.value || currentUser?.barbero_id;
+    if (!barberoId) { c.innerHTML = '<div class="sin-huecos">Selecciona un barbero.</div>'; return; }
+    c.innerHTML = '<div class="sin-huecos">Cargando...</div>';
+    try {
+        const res = await fetch(`${API_URL}/api/admin/servicios?barbero_id=${barberoId}`, { headers: getAuthHeaders() });
+        if (res.status === 401) { c.innerHTML = '<div class="sin-huecos">Sesión expirada.</div>'; return; }
+        const servicios = await res.json();
+        c.innerHTML = '';
+        if (!servicios.length) { c.innerHTML = '<div class="sin-huecos">No hay servicios.</div>'; return; }
+        servicios.forEach(s => {
+            const div = document.createElement('div');
+            div.className = 'cita-item';
+            div.style.opacity = s.activo ? 1 : 0.5;
+            div.innerHTML = `
+                <div class="info">
+                    <div class="fecha-hora">${escaparHTML(s.nombre)} ${!s.activo ? '<small style="color:#8a7a6a;">(Inactivo)</small>' : ''}</div>
+                    <div class="servicio">Duracion: ${s.duracion_minutos} min - Precio: $${Number(s.precio).toLocaleString('es-CO')} COP</div>
+                    ${s.descripcion ? `<div class="cliente">${escaparHTML(s.descripcion)}</div>` : ''}
+                </div>
+                <div class="acciones">
+                    <button class="btn-modificar" onclick="editarServicio(${s.id})">Editar</button>
+                    <button class="btn-secundario" onclick="toggleServicioActivo(${s.id}, ${s.activo})">${s.activo ? 'Desactivar' : 'Activar'}</button>
+                    <button class="btn-danger" onclick="eliminarServicio(${s.id})">🗑️</button>
+                </div>
+            `;
+            c.appendChild(div);
+        });
+    } catch (e) { c.innerHTML = '<div class="sin-huecos">Error.</div>'; }
+}
+
+function abrirFormServicio() {
+    document.getElementById('formServicio').style.display = 'block';
+    document.getElementById('servicioEditId').value = '';
+    document.getElementById('servicioNombre').value = '';
+    document.getElementById('servicioDuracion').value = '';
+    document.getElementById('servicioPrecio').value = '';
+    document.getElementById('servicioDescripcion').value = '';
+    document.getElementById('mensajeServicio').style.display = 'none';
+}
+
+function cerrarFormServicio() { document.getElementById('formServicio').style.display = 'none'; }
+
+async function guardarServicio() {
+    const id = document.getElementById('servicioEditId').value;
+    const nombre = document.getElementById('servicioNombre').value.trim();
+    const duracion = parseInt(document.getElementById('servicioDuracion').value);
+    const precio = parseFloat(document.getElementById('servicioPrecio').value);
+    if (!nombre) { alert('El nombre es obligatorio'); return; }
+    if (!duracion || duracion <= 0) { alert('Duración inválida'); return; }
+    if (isNaN(precio) || precio < 0) { alert('Precio inválido'); return; }
+    const selBarbero = document.getElementById('serviciosBarberoSelect');
+    const barberoId = selBarbero?.value || currentUser?.barbero_id;
+    const body = {
+        nombre,
+        duracion_minutos: duracion,
+        precio: precio,
+        descripcion: document.getElementById('servicioDescripcion').value.trim(),
+        barbero_id: parseInt(barberoId)
+    };
+    const url = id ? `${API_URL}/api/admin/servicios/${id}` : `${API_URL}/api/admin/servicios`;
+    const method = id ? 'PUT' : 'POST';
+    try {
+        const res = await fetch(url, { method, headers: getAuthHeaders(), body: JSON.stringify(body) });
+        const d = await res.json();
+        const msg = document.getElementById('mensajeServicio');
+        msg.className = 'mensaje ' + (res.ok ? 'exito' : 'error');
+        msg.textContent = d.mensaje || d.error;
+        msg.style.display = 'block';
+        if (res.ok) {
+            setTimeout(() => { cerrarFormServicio(); cargarServiciosAdmin(); }, 1000);
+        }
+    } catch (e) { alert('Error.'); }
+}
+
+async function editarServicio(id) {
+    const selBarbero = document.getElementById('serviciosBarberoSelect');
+    const barberoId = selBarbero?.value || currentUser?.barbero_id;
+    try {
+        const res = await fetch(`${API_URL}/api/admin/servicios?barbero_id=${barberoId}`, { headers: getAuthHeaders() });
+        const servicios = await res.json();
+        const s = servicios.find(x => x.id === id);
+        if (!s) return;
+        document.getElementById('servicioEditId').value = s.id;
+        document.getElementById('servicioNombre').value = s.nombre;
+        document.getElementById('servicioDuracion').value = s.duracion_minutos;
+        document.getElementById('servicioPrecio').value = s.precio;
+        document.getElementById('servicioDescripcion').value = s.descripcion || '';
+        document.getElementById('formServicio').style.display = 'block';
+        document.getElementById('formServicio').scrollIntoView({ behavior: 'smooth' });
+    } catch (e) { alert('Error.'); }
+}
+
+async function toggleServicioActivo(id, activo) {
+    try {
+        const res = await fetch(`${API_URL}/api/admin/servicios/${id}`, {
+            method: 'PUT', headers: getAuthHeaders(),
+            body: JSON.stringify({ activo: !activo })
+        });
+        if (res.ok) cargarServiciosAdmin();
+    } catch (e) {}
+}
+
+async function eliminarServicio(id) {
+    if (!confirm('¿Eliminar este servicio? Si tiene citas, solo se desactivará.')) return;
+    try {
+        const res = await fetch(`${API_URL}/api/admin/servicios/${id}`, {
+            method: 'DELETE', headers: getAuthHeaders()
+        });
+        const d = await res.json();
+        alert(d.mensaje || d.error);
+        if (res.ok) cargarServiciosAdmin();
+    } catch (e) { alert('Error.'); }
 }
 
 // ===== CATALOGO (ADMIN) =====
@@ -864,295 +1030,6 @@ async function bloquearDias() {
     }
 }
 
-// ===== SERVICIOS (ADMIN) =====
-async function cargarServiciosAdmin() {
-    const c = document.getElementById('listaServicios');
-    if (!c) return;
-    c.innerHTML = '<div class="sin-huecos">Cargando...</div>';
-    try {
-        const res = await fetch(`${API_URL}/api/admin/servicios`, { headers: getAuthHeaders() });
-        if (res.status === 401) { c.innerHTML = '<div class="sin-huecos">Sesión expirada.</div>'; return; }
-        const servicios = await res.json();
-        c.innerHTML = '';
-        if (!servicios.length) { c.innerHTML = '<div class="sin-huecos">No hay servicios.</div>'; return; }
-        servicios.forEach(s => {
-            const div = document.createElement('div');
-            div.className = 'cita-item';
-            div.style.opacity = s.activo ? 1 : 0.5;
-            div.innerHTML = `
-                <div class="info">
-                    <div class="fecha-hora">${escaparHTML(s.nombre)} ${!s.activo ? '<small style="color:#8a7a6a;">(Inactivo)</small>' : ''}</div>
-                    <div class="servicio">Duracion: ${s.duracion_minutos} min - Precio: $${Number(s.precio).toLocaleString('es-CO')} COP</div>
-                    ${s.descripcion ? `<div class="cliente">${escaparHTML(s.descripcion)}</div>` : ''}
-                </div>
-                <div class="acciones">
-                    <button class="btn-modificar" onclick="editarServicio(${s.id})">Editar</button>
-                    <button class="btn-secundario" onclick="toggleServicioActivo(${s.id}, ${s.activo})">${s.activo ? 'Desactivar' : 'Activar'}</button>
-                    <button class="btn-danger" onclick="eliminarServicio(${s.id})">🗑️</button>
-                </div>
-            `;
-            c.appendChild(div);
-        });
-    } catch (e) { c.innerHTML = '<div class="sin-huecos">Error.</div>'; }
-}
-
-function abrirFormServicio() {
-    document.getElementById('formServicio').style.display = 'block';
-    document.getElementById('servicioEditId').value = '';
-    document.getElementById('servicioNombre').value = '';
-    document.getElementById('servicioDuracion').value = '';
-    document.getElementById('servicioPrecio').value = '';
-    document.getElementById('servicioDescripcion').value = '';
-    document.getElementById('mensajeServicio').style.display = 'none';
-}
-
-function cerrarFormServicio() { document.getElementById('formServicio').style.display = 'none'; }
-
-async function guardarServicio() {
-    const id = document.getElementById('servicioEditId').value;
-    const nombre = document.getElementById('servicioNombre').value.trim();
-    const duracion = parseInt(document.getElementById('servicioDuracion').value);
-    const precio = parseFloat(document.getElementById('servicioPrecio').value);
-    
-    if (!nombre) { alert('El nombre es obligatorio'); return; }
-    if (!duracion || duracion <= 0) { alert('Duración inválida'); return; }
-    if (isNaN(precio) || precio < 0) { alert('Precio inválido'); return; }
-    
-    const body = {
-        nombre,
-        duracion_minutos: duracion,
-        precio: precio,
-        descripcion: document.getElementById('servicioDescripcion').value.trim()
-    };
-    
-    const url = id ? `${API_URL}/api/admin/servicios/${id}` : `${API_URL}/api/admin/servicios`;
-    const method = id ? 'PUT' : 'POST';
-    
-    try {
-        const res = await fetch(url, { method, headers: getAuthHeaders(), body: JSON.stringify(body) });
-        const d = await res.json();
-        const msg = document.getElementById('mensajeServicio');
-        msg.className = 'mensaje ' + (res.ok ? 'exito' : 'error');
-        msg.textContent = d.mensaje || d.error;
-        msg.style.display = 'block';
-        if (res.ok) {
-            setTimeout(() => {
-                cerrarFormServicio();
-                cargarServiciosAdmin();
-                cargarServiciosCliente(); // Actualizar selector del cliente
-            }, 1000);
-        }
-    } catch (e) { alert('Error.'); }
-}
-
-async function editarServicio(id) {
-    try {
-        const res = await fetch(`${API_URL}/api/admin/servicios`, { headers: getAuthHeaders() });
-        const servicios = await res.json();
-        const s = servicios.find(x => x.id === id);
-        if (!s) return;
-        document.getElementById('servicioEditId').value = s.id;
-        document.getElementById('servicioNombre').value = s.nombre;
-        document.getElementById('servicioDuracion').value = s.duracion_minutos;
-        document.getElementById('servicioPrecio').value = s.precio;
-        document.getElementById('servicioDescripcion').value = s.descripcion || '';
-        document.getElementById('formServicio').style.display = 'block';
-        document.getElementById('formServicio').scrollIntoView({ behavior: 'smooth' });
-    } catch (e) { alert('Error.'); }
-}
-
-async function toggleServicioActivo(id, activo) {
-    try {
-        const res = await fetch(`${API_URL}/api/admin/servicios/${id}`, {
-            method: 'PUT', headers: getAuthHeaders(),
-            body: JSON.stringify({ activo: !activo })
-        });
-        if (res.ok) { cargarServiciosAdmin(); cargarServiciosCliente(); }
-    } catch (e) {}
-}
-
-async function eliminarServicio(id) {
-    if (!confirm('¿Eliminar este servicio? Si tiene citas, solo se desactivará.')) return;
-    try {
-        const res = await fetch(`${API_URL}/api/admin/servicios/${id}`, {
-            method: 'DELETE', headers: getAuthHeaders()
-        });
-        const d = await res.json();
-        alert(d.mensaje || d.error);
-        if (res.ok) { cargarServiciosAdmin(); cargarServiciosCliente(); }
-    } catch (e) { alert('Error.'); }
-}
-
-// Cargar servicios dinámicamente en el selector del cliente
-async function cargarServiciosCliente() {
-    try {
-        const res = await fetch(`${API_URL}/api/servicios`);
-        const servicios = await res.json();
-        const sel = document.getElementById('servicio');
-        if (!sel) return;
-        const val = sel.value;
-        sel.innerHTML = '';
-        if (!servicios.length) {
-            sel.innerHTML = '<option value="">No hay servicios</option>';
-            return;
-        }
-        servicios.forEach(s => {
-            const o = document.createElement('option');
-            o.value = s.id;
-            o.textContent = `${s.nombre} (${s.duracion_minutos}min - $${Number(s.precio).toLocaleString('es-CO')} COP)`;
-            sel.appendChild(o);
-        });
-        if (val) sel.value = val;
-    } catch (e) {}
-}
-
-// ===== SERVICIOS (ADMIN) =====
-async function cargarServiciosAdmin() {
-    const c = document.getElementById('listaServicios');
-    if (!c) return;
-    c.innerHTML = '<div class="sin-huecos">Cargando...</div>';
-    try {
-        const res = await fetch(`${API_URL}/api/admin/servicios`, { headers: getAuthHeaders() });
-        if (res.status === 401) { c.innerHTML = '<div class="sin-huecos">Sesión expirada.</div>'; return; }
-        const servicios = await res.json();
-        c.innerHTML = '';
-        if (!servicios.length) { c.innerHTML = '<div class="sin-huecos">No hay servicios.</div>'; return; }
-        servicios.forEach(s => {
-            const div = document.createElement('div');
-            div.className = 'cita-item';
-            div.style.opacity = s.activo ? 1 : 0.5;
-            div.innerHTML = `
-                <div class="info">
-                    <div class="fecha-hora">${escaparHTML(s.nombre)} ${!s.activo ? '<small style="color:#8a7a6a;">(Inactivo)</small>' : ''}</div>
-                    <div class="servicio">Duracion: ${s.duracion_minutos} min - Precio: $${Number(s.precio).toLocaleString('es-CO')} COP</div>
-                    ${s.descripcion ? `<div class="cliente">${escaparHTML(s.descripcion)}</div>` : ''}
-                </div>
-                <div class="acciones">
-                    <button class="btn-modificar" onclick="editarServicio(${s.id})">Editar</button>
-                    <button class="btn-secundario" onclick="toggleServicioActivo(${s.id}, ${s.activo})">${s.activo ? 'Desactivar' : 'Activar'}</button>
-                    <button class="btn-danger" onclick="eliminarServicio(${s.id})">🗑️</button>
-                </div>
-            `;
-            c.appendChild(div);
-        });
-    } catch (e) { c.innerHTML = '<div class="sin-huecos">Error.</div>'; }
-}
-
-function abrirFormServicio() {
-    document.getElementById('formServicio').style.display = 'block';
-    document.getElementById('servicioEditId').value = '';
-    document.getElementById('servicioNombre').value = '';
-    document.getElementById('servicioDuracion').value = '';
-    document.getElementById('servicioPrecio').value = '';
-    document.getElementById('servicioDescripcion').value = '';
-    document.getElementById('mensajeServicio').style.display = 'none';
-}
-
-function cerrarFormServicio() { document.getElementById('formServicio').style.display = 'none'; }
-
-async function guardarServicio() {
-    const id = document.getElementById('servicioEditId').value;
-    const nombre = document.getElementById('servicioNombre').value.trim();
-    const duracion = parseInt(document.getElementById('servicioDuracion').value);
-    const precio = parseFloat(document.getElementById('servicioPrecio').value);
-    if (!nombre) { alert('El nombre es obligatorio'); return; }
-    if (!duracion || duracion <= 0) { alert('Duración inválida'); return; }
-    if (isNaN(precio) || precio < 0) { alert('Precio inválido'); return; }
-    const body = { nombre, duracion_minutos: duracion, precio, descripcion: document.getElementById('servicioDescripcion').value.trim() };
-    const url = id ? `${API_URL}/api/admin/servicios/${id}` : `${API_URL}/api/admin/servicios`;
-    const method = id ? 'PUT' : 'POST';
-    try {
-        const res = await fetch(url, { method, headers: getAuthHeaders(), body: JSON.stringify(body) });
-        const d = await res.json();
-        const msg = document.getElementById('mensajeServicio');
-        msg.className = 'mensaje ' + (res.ok ? 'exito' : 'error');
-        msg.textContent = d.mensaje || d.error;
-        msg.style.display = 'block';
-        if (res.ok) {
-            setTimeout(() => {
-                cerrarFormServicio();
-                cargarServiciosAdmin();
-                cargarServiciosCliente();
-            }, 1000);
-        }
-    } catch (e) { alert('Error.'); }
-}
-
-async function editarServicio(id) {
-    try {
-        const res = await fetch(`${API_URL}/api/admin/servicios`, { headers: getAuthHeaders() });
-        const servicios = await res.json();
-        const s = servicios.find(x => x.id === id);
-        if (!s) return;
-        document.getElementById('servicioEditId').value = s.id;
-        document.getElementById('servicioNombre').value = s.nombre;
-        document.getElementById('servicioDuracion').value = s.duracion_minutos;
-        document.getElementById('servicioPrecio').value = s.precio;
-        document.getElementById('servicioDescripcion').value = s.descripcion || '';
-        document.getElementById('formServicio').style.display = 'block';
-        document.getElementById('formServicio').scrollIntoView({ behavior: 'smooth' });
-    } catch (e) { alert('Error.'); }
-}
-
-async function toggleServicioActivo(id, activo) {
-    try {
-        const res = await fetch(`${API_URL}/api/admin/servicios/${id}`, {
-            method: 'PUT', headers: getAuthHeaders(),
-            body: JSON.stringify({ activo: !activo })
-        });
-        if (res.ok) { cargarServiciosAdmin(); cargarServiciosCliente(); }
-    } catch (e) {}
-}
-
-async function eliminarServicio(id) {
-    if (!confirm('¿Eliminar este servicio? Si tiene citas, solo se desactivará.')) return;
-    try {
-        const res = await fetch(`${API_URL}/api/admin/servicios/${id}`, {
-            method: 'DELETE', headers: getAuthHeaders()
-        });
-        const d = await res.json();
-        alert(d.mensaje || d.error);
-        if (res.ok) { cargarServiciosAdmin(); cargarServiciosCliente(); }
-    } catch (e) { alert('Error.'); }
-}
-
-async function cargarServiciosCliente() {
-    const barberoId = document.getElementById('barbero')?.value || 0;
-    try {
-        const res = await fetch(`${API_URL}/api/servicios?barbero_id=${barberoId}`);
-        const servicios = await res.json();
-        const sel = document.getElementById('servicio');
-        if (!sel) return;
-        const val = sel.value;
-        sel.innerHTML = '';
-        if (!servicios.length) {
-            sel.innerHTML = '<option value="">No hay servicios</option>';
-            return;
-        }
-        servicios.forEach(s => {
-            const o = document.createElement('option');
-            o.value = s.id;
-            o.textContent = `${s.nombre} (${s.duracion_minutos}min - $${Number(s.precio).toLocaleString('es-CO')} COP)`;
-            sel.appendChild(o);
-        });
-        if (val) sel.value = val;
-    } catch (e) {}
-}
-
-window.abrirFormServicio = abrirFormServicio;
-window.cerrarFormServicio = cerrarFormServicio;
-window.guardarServicio = guardarServicio;
-window.editarServicio = editarServicio;
-window.toggleServicioActivo = toggleServicioActivo;
-window.eliminarServicio = eliminarServicio;
-
-window.abrirFormServicio = abrirFormServicio;
-window.cerrarFormServicio = cerrarFormServicio;
-window.guardarServicio = guardarServicio;
-window.editarServicio = editarServicio;
-window.toggleServicioActivo = toggleServicioActivo;
-window.eliminarServicio = eliminarServicio;
-
 // ===== INICIALIZACIÓN =====
 document.addEventListener('DOMContentLoaded', function() {
     cargarSesion();
@@ -1169,11 +1046,10 @@ document.addEventListener('DOMContentLoaded', function() {
         if (iI) { iI.value = hStr; iI.min = hStr; }
         if (iFn) { iFn.value = hStr; iFn.min = hStr; }
     } catch (e) {}
-    cargarBarberosSelectorCliente();
-    cargarServiciosCliente(); // ← NUEVA LÍNEA
+    cargarBarberosCliente();
 });
 
-// ===== EXPORTAR AL GLOBAL =====
+// Exponer al global
 window.cambiarVista = cambiarVista;
 window.cambiarTabCliente = cambiarTabCliente;
 window.cambiarTabBarbero = cambiarTabBarbero;
@@ -1196,6 +1072,13 @@ window.guardarBarbero = guardarBarbero;
 window.editarBarbero = editarBarbero;
 window.desactivarBarbero = desactivarBarbero;
 window.eliminarBarberoPermanente = eliminarBarberoPermanente;
+window.abrirFormServicio = abrirFormServicio;
+window.cerrarFormServicio = cerrarFormServicio;
+window.guardarServicio = guardarServicio;
+window.editarServicio = editarServicio;
+window.toggleServicioActivo = toggleServicioActivo;
+window.eliminarServicio = eliminarServicio;
+window.cargarServiciosAdmin = cargarServiciosAdmin;
 window.abrirFormItem = abrirFormItem;
 window.cerrarFormItem = cerrarFormItem;
 window.guardarItem = guardarItem;
@@ -1203,3 +1086,4 @@ window.editarItem = editarItem;
 window.toggleItemActivo = toggleItemActivo;
 window.eliminarItem = eliminarItem;
 window.bloquearDias = bloquearDias;
+window.alCambiarBarbero = alCambiarBarbero;
