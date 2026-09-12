@@ -527,3 +527,33 @@ def eliminar_item_catalogo(item_id):
         return jsonify({'mensaje': 'Item eliminado'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+# ========== CAMBIAR CONTRASEÑA (TEMPORAL) ==========
+@admin_bp.route('/api/admin/cambiar-password', methods=['GET'])
+def cambiar_password():
+    """⚠️ TEMPORAL: Cambia la contraseña de un usuario."""
+    token = request.args.get('token', '')
+    if token != 'pass2026':
+        return jsonify({'error': 'Token inválido'}), 403
+    username = request.args.get('username', 'admin')
+    nueva = request.args.get('nueva', '')
+    if not nueva or len(nueva) < 6:
+        return jsonify({'error': 'La contraseña debe tener al menos 6 caracteres'}), 400
+    try:
+        from werkzeug.security import generate_password_hash
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute('SELECT id FROM usuarios WHERE username = %s', (username,))
+        if not cursor.fetchone():
+            conn.close()
+            return jsonify({'error': f'Usuario {username} no existe'}), 404
+        pwd_hash = generate_password_hash(nueva)
+        cursor.execute('UPDATE usuarios SET password_hash = %s WHERE username = %s', (pwd_hash, username))
+        conn.commit()
+        conn.close()
+        return jsonify({
+            'mensaje': f'✅ Contraseña de {username} cambiada exitosamente',
+            'nueva_contraseña': nueva
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
