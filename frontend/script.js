@@ -226,29 +226,47 @@ function cambiarTabBarbero(tab) {
     document.querySelectorAll('#tabsBarbero button').forEach(b => b.classList.remove('activo'));
     document.querySelectorAll('#barberoContenido .panel-tab').forEach(p => p.style.display = 'none');
     const b = document.querySelectorAll('#tabsBarbero button');
-    if (tab === 'pendientes') { b[0].classList.add('activo'); document.getElementById('tabPendientes').style.display = 'block'; cargarPendientes(); }
-    else if (tab === 'historial') { b[1].classList.add('activo'); document.getElementById('tabHistorial').style.display = 'block'; cargarHistorial(); }
+    
+    // Detectar el índice de cada botón por su texto (más robusto)
+    const tabsNombres = Array.from(b).map(btn => btn.textContent.trim());
+    const idxPendientes = tabsNombres.indexOf('Pendientes');
+    const idxHistorial = tabsNombres.indexOf('Historial');
+    const idxBarberos = tabsNombres.indexOf('Barberos');
+    const idxServicios = tabsNombres.indexOf('Servicios');
+    const idxCatalogo = tabsNombres.indexOf('Catalogo');
+    const idxEstadisticas = tabsNombres.indexOf('Estadisticas');
+    const idxMisEstadisticas = tabsNombres.indexOf('Mis Estadisticas');
+    const idxConfig = tabsNombres.indexOf('Configuracion');
+    
+    const activar = (idx) => { if (idx >= 0 && b[idx]) b[idx].classList.add('activo'); };
+    
+    if (tab === 'pendientes') { activar(idxPendientes); document.getElementById('tabPendientes').style.display = 'block'; cargarPendientes(); }
+    else if (tab === 'historial') { activar(idxHistorial); document.getElementById('tabHistorial').style.display = 'block'; cargarHistorial(); }
     else if (tab === 'barberos') {
         if (!esAdmin()) { alert('Solo admin'); return; }
-        b[2].classList.add('activo'); document.getElementById('tabBarberos').style.display = 'block';
+        activar(idxBarberos); document.getElementById('tabBarberos').style.display = 'block';
         cargarBarberos(); cargarBarberosSelectorAdmin();
     }
     else if (tab === 'servicios') {
-        b[3].classList.add('activo'); document.getElementById('tabServicios').style.display = 'block';
+        activar(idxServicios); document.getElementById('tabServicios').style.display = 'block';
         cargarServiciosSelectorAdmin(); cargarServiciosAdmin();
     }
     else if (tab === 'catalogo') {
         if (!esAdmin()) { alert('Solo admin'); return; }
-        b[4].classList.add('activo'); document.getElementById('tabCatalogo').style.display = 'block';
+        activar(idxCatalogo); document.getElementById('tabCatalogo').style.display = 'block';
         cargarCatalogoAdmin();
     }
     else if (tab === 'estadisticas') {
         if (!esAdmin()) { alert('Solo admin'); return; }
-        b[5].classList.add('activo'); document.getElementById('tabEstadisticas').style.display = 'block';
+        activar(idxEstadisticas); document.getElementById('tabEstadisticas').style.display = 'block';
         cargarEstadisticas();
     }
+    else if (tab === 'mis-estadisticas') {
+        activar(idxMisEstadisticas); document.getElementById('tabMisEstadisticas').style.display = 'block';
+        cargarMisEstadisticas();
+    }
     else if (tab === 'configuracion') {
-        b[6].classList.add('activo'); document.getElementById('tabConfiguracion').style.display = 'block';
+        activar(idxConfig); document.getElementById('tabConfiguracion').style.display = 'block';
         cargarBarberosSelectorAdmin();
     }
 }
@@ -1265,24 +1283,43 @@ async function cargarEstadisticas() {
             return;
         }
         
-        // Resumen
         document.getElementById('statCitasMes').textContent = data.resumen.citas_mes_actual;
         document.getElementById('statCitasTotal').textContent = data.resumen.citas_totales;
         document.getElementById('statClientes').textContent = data.resumen.total_clientes;
         document.getElementById('statIngresos').textContent = '$' + Number(data.resumen.ingresos_totales).toLocaleString('es-CO');
         
-        // Gráfico de citas por mes
         dibujarGraficoBarras('graficoCitas', data.citas_mes.etiquetas, data.citas_mes.valores, 'Citas');
-        
-        // Gráfico de ingresos
         dibujarGraficoLineas('graficoIngresos', data.ingresos_mes.etiquetas, data.ingresos_mes.valores);
-        
-        // Gráfico de barberos
         dibujarGraficoDona('graficoBarberos', data.barberos.nombres, data.barberos.cantidades);
-        
-        // Top clientes
         dibujarTopClientes(data.clientes_top);
+    } catch (e) {
+        console.error('Error cargando estadísticas:', e);
+        mostrarToast('Error al cargar estadísticas', 'error');
+    }
+}
+
+async function cargarMisEstadisticas() {
+    try {
+        const res = await fetch(`${API_URL}/api/admin/estadisticas`, { headers: getAuthHeaders() });
+        if (res.status === 401) {
+            mostrarToast('Sesión expirada', 'error');
+            return;
+        }
+        const data = await res.json();
+        if (data.error) {
+            mostrarToast(data.error, 'error');
+            return;
+        }
         
+        document.getElementById('statMisCitasMes').textContent = data.resumen.citas_mes_actual;
+        document.getElementById('statMisCitasTotal').textContent = data.resumen.citas_totales;
+        document.getElementById('statMisClientes').textContent = data.resumen.total_clientes;
+        document.getElementById('statMisIngresos').textContent = '$' + Number(data.resumen.ingresos_totales).toLocaleString('es-CO');
+        
+        dibujarGraficoBarras('graficoMisCitas', data.citas_mes.etiquetas, data.citas_mes.valores, 'Citas');
+        dibujarGraficoLineas('graficoMisIngresos', data.ingresos_mes.etiquetas, data.ingresos_mes.valores);
+        dibujarGraficoDona('graficoMisServicios', data.barberos.nombres, data.barberos.cantidades);
+        dibujarTopClientes(data.clientes_top, 'topMisClientes');
     } catch (e) {
         console.error('Error cargando estadísticas:', e);
         mostrarToast('Error al cargar estadísticas', 'error');
@@ -1405,8 +1442,8 @@ function dibujarGraficoDona(id, nombres, cantidades) {
     });
 }
 
-function dibujarTopClientes(clientes) {
-    const cont = document.getElementById('topClientes');
+function dibujarTopClientes(clientes, contenedorId = 'topClientes') {
+    const cont = document.getElementById(contenedorId);
     if (!cont) return;
     if (!clientes || !clientes.length) {
         cont.innerHTML = '<div class="sin-datos-stats">Aún no hay datos de clientes</div>';
@@ -1420,6 +1457,91 @@ function dibujarTopClientes(clientes) {
     `).join('');
 }
 
+
+// ===== MODAL DE DETALLE =====
+async function verDetalle(tipo) {
+    const modal = document.getElementById('modal-detalle');
+    const titulo = document.getElementById('detalle-titulo');
+    const contenido = document.getElementById('detalle-contenido');
+    
+    titulo.textContent = 'Cargando...';
+    contenido.innerHTML = '<div class="detalle-vacio">Cargando...</div>';
+    modal.classList.add('activo');
+    
+    try {
+        const res = await fetch(`${API_URL}/api/admin/estadisticas-detalle?tipo=${tipo}`, { headers: getAuthHeaders() });
+        const data = await res.json();
+        if (data.error) {
+            contenido.innerHTML = `<div class="detalle-vacio">Error: ${data.error}</div>`;
+            return;
+        }
+        titulo.textContent = data.titulo;
+        
+        if (!data.items || !data.items.length) {
+            contenido.innerHTML = '<div class="detalle-vacio">No hay datos todavía</div>';
+            return;
+        }
+        
+        let html = '<table><thead><tr>';
+        
+        // Encabezados según tipo
+        if (tipo === 'citas_mes' || tipo === 'citas_totales') {
+            html += '<th>Fecha</th><th>Hora</th><th>Cliente</th><th>Servicio</th><th>Precio</th><th>Barbero</th>';
+            html += '</tr></thead><tbody>';
+            let total = 0;
+            data.items.forEach(it => {
+                html += `<tr>
+                    <td>${escaparHTML(it.fecha || '')}</td>
+                    <td>${escaparHTML(it.hora_inicio || '')}</td>
+                    <td>${escaparHTML(it.cliente || '')}</td>
+                    <td>${escaparHTML(it.servicio || '')}</td>
+                    <td>$${Number(it.precio || 0).toLocaleString('es-CO')}</td>
+                    <td>${escaparHTML(it.barbero || '')}</td>
+                </tr>`;
+                total += Number(it.precio || 0);
+            });
+            html += `<tr class="total-line"><td colspan="4"><strong>TOTAL</strong></td><td colspan="2"><strong>$${total.toLocaleString('es-CO')}</strong></td></tr>`;
+        } else if (tipo === 'clientes') {
+            html += '<th>Cliente</th><th>Teléfono</th><th>Citas</th><th>Total gastado</th>';
+            html += '</tr></thead><tbody>';
+            data.items.forEach(it => {
+                html += `<tr>
+                    <td>${escaparHTML(it.nombre || '')}</td>
+                    <td>${escaparHTML(it.telefono || 'N/A')}</td>
+                    <td>${it.total_citas}</td>
+                    <td>$${Number(it.total_gastado || 0).toLocaleString('es-CO')}</td>
+                </tr>`;
+            });
+        } else if (tipo === 'ingresos') {
+            html += '<th>Servicio</th><th>Cantidad</th><th>Total</th>';
+            html += '</tr></thead><tbody>';
+            let total = 0;
+            data.items.forEach(it => {
+                html += `<tr>
+                    <td>${escaparHTML(it.servicio || '')}</td>
+                    <td>${it.cantidad}</td>
+                    <td>$${Number(it.total || 0).toLocaleString('es-CO')}</td>
+                </tr>`;
+                total += Number(it.total || 0);
+            });
+            html += `<tr class="total-line"><td colspan="2"><strong>TOTAL</strong></td><td><strong>$${total.toLocaleString('es-CO')}</strong></td></tr>`;
+        }
+        
+        html += '</tbody></table>';
+        contenido.innerHTML = html;
+    } catch (e) {
+        console.error('Error cargando detalle:', e);
+        contenido.innerHTML = '<div class="detalle-vacio">Error al cargar</div>';
+    }
+}
+
+function cerrarModalDetalle() {
+    document.getElementById('modal-detalle').classList.remove('activo');
+}
+
+window.verDetalle = verDetalle;
+window.cerrarModalDetalle = cerrarModalDetalle;
+window.cargarMisEstadisticas = cargarMisEstadisticas;
 window.cargarEstadisticas = cargarEstadisticas;
 window.avisarPorWhatsApp = avisarPorWhatsApp;
 window.reactivarBarbero = reactivarBarbero;

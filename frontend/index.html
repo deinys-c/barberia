@@ -36,6 +36,7 @@
         <button onclick="cambiarTabBarbero('servicios')">Servicios</button>
         <button onclick="cambiarTabBarbero('catalogo')" class="solo-admin" style="display:none;">Catalogo</button>
         <button onclick="cambiarTabBarbero('estadisticas')" class="solo-admin" style="display:none;">Estadisticas</button>
+        <button onclick="cambiarTabBarbero('mis-estadisticas')">Mis Estadisticas</button>
         <button onclick="cambiarTabBarbero('configuracion')">Configuracion</button>
     </div>
 
@@ -265,29 +266,27 @@
 
             <!-- ESTADISTICAS (solo admin) -->
             <div id="tabEstadisticas" class="panel-tab" style="display:none;">
-                <h3>Estadisticas</h3>
+                <h3>Estadisticas Generales</h3>
                 
-                <!-- Resumen -->
                 <div class="resumen-grid" id="resumenStats">
-                    <div class="resumen-card">
+                    <div class="resumen-card clickeable" onclick="verDetalle('citas_mes')">
                         <div class="resumen-valor" id="statCitasMes">0</div>
                         <div class="resumen-etiqueta">Citas este mes</div>
                     </div>
-                    <div class="resumen-card">
+                    <div class="resumen-card clickeable" onclick="verDetalle('citas_totales')">
                         <div class="resumen-valor" id="statCitasTotal">0</div>
                         <div class="resumen-etiqueta">Citas totales</div>
                     </div>
-                    <div class="resumen-card">
+                    <div class="resumen-card clickeable" onclick="verDetalle('clientes')">
                         <div class="resumen-valor" id="statClientes">0</div>
                         <div class="resumen-etiqueta">Clientes</div>
                     </div>
-                    <div class="resumen-card">
+                    <div class="resumen-card clickeable" onclick="verDetalle('ingresos')">
                         <div class="resumen-valor" id="statIngresos">$0</div>
                         <div class="resumen-etiqueta">Ingresos estimados</div>
                     </div>
                 </div>
                 
-                <!-- Gráficos -->
                 <div class="graficos-grid">
                     <div class="grafico-card">
                         <h4>Citas por mes</h4>
@@ -304,6 +303,49 @@
                     <div class="grafico-card">
                         <h4>Top 5 clientes</h4>
                         <div id="topClientes"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- MIS ESTADISTICAS (barbero) -->
+            <div id="tabMisEstadisticas" class="panel-tab" style="display:none;">
+                <h3>Mis Estadisticas</h3>
+                
+                <div class="resumen-grid">
+                    <div class="resumen-card clickeable" onclick="verDetalle('citas_mes')">
+                        <div class="resumen-valor" id="statMisCitasMes">0</div>
+                        <div class="resumen-etiqueta">Mis citas este mes</div>
+                    </div>
+                    <div class="resumen-card clickeable" onclick="verDetalle('citas_totales')">
+                        <div class="resumen-valor" id="statMisCitasTotal">0</div>
+                        <div class="resumen-etiqueta">Mis citas totales</div>
+                    </div>
+                    <div class="resumen-card clickeable" onclick="verDetalle('clientes')">
+                        <div class="resumen-valor" id="statMisClientes">0</div>
+                        <div class="resumen-etiqueta">Mis clientes</div>
+                    </div>
+                    <div class="resumen-card clickeable" onclick="verDetalle('ingresos')">
+                        <div class="resumen-valor" id="statMisIngresos">$0</div>
+                        <div class="resumen-etiqueta">Mis ingresos estimados</div>
+                    </div>
+                </div>
+                
+                <div class="graficos-grid">
+                    <div class="grafico-card">
+                        <h4>Mis citas por mes</h4>
+                        <canvas id="graficoMisCitas"></canvas>
+                    </div>
+                    <div class="grafico-card">
+                        <h4>Mis ingresos por mes</h4>
+                        <canvas id="graficoMisIngresos"></canvas>
+                    </div>
+                    <div class="grafico-card">
+                        <h4>Mis servicios mas solicitados</h4>
+                        <canvas id="graficoMisServicios"></canvas>
+                    </div>
+                    <div class="grafico-card">
+                        <h4>Mis top 5 clientes</h4>
+                        <div id="topMisClientes"></div>
                     </div>
                 </div>
             </div>
@@ -344,6 +386,18 @@
         </div>
     </div>
 </div>
+
+<!-- Modal de detalle de estadísticas -->
+<div id="modal-detalle" class="modal-overlay">
+    <div class="modal-box modal-box-lg">
+        <h3 id="detalle-titulo">Detalle</h3>
+        <div id="detalle-contenido" class="detalle-contenido"></div>
+        <div class="modal-botones">
+            <button class="btn" onclick="cerrarModalDetalle()">Cerrar</button>
+        </div>
+    </div>
+</div>
+
 <script src="script.js"></script>
 </body>
 </html>

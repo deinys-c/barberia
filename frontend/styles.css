@@ -393,3 +393,77 @@ body.modo-claro .cliente-top-citas { color: #6a4a2a; }
     .resumen-valor { font-size: 1.3rem; }
     .graficos-grid { grid-template-columns: 1fr; }
 }
+
+/* ===== TARJETAS CLICKEABLES ===== */
+.resumen-card.clickeable {
+    cursor: pointer;
+    transition: 0.3s;
+}
+.resumen-card.clickeable:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 25px rgba(201, 168, 76, 0.3);
+    border-color: #c9a84c;
+}
+.resumen-card.clickeable::after {
+    content: '👁️ Click para detalle';
+    display: block;
+    font-size: 0.7rem;
+    color: #8a7a6a;
+    margin-top: 8px;
+    letter-spacing: 1px;
+}
+
+/* ===== MODAL GRANDE ===== */
+.modal-box-lg {
+    max-width: 900px;
+    max-height: 85vh;
+    overflow-y: auto;
+}
+.detalle-contenido {
+    color: #f0d5a8;
+    margin: 15px 0;
+    max-height: 60vh;
+    overflow-y: auto;
+}
+.detalle-contenido table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+}
+.detalle-contenido th {
+    background: rgba(201, 168, 76, 0.15);
+    color: #c9a84c;
+    padding: 10px;
+    text-align: left;
+    position: sticky;
+    top: 0;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+.detalle-contenido td {
+    padding: 10px;
+    border-bottom: 1px solid rgba(201, 168, 76, 0.1);
+    color: #f0d5a8;
+}
+.detalle-contenido tr:hover td {
+    background: rgba(201, 168, 76, 0.05);
+}
+.detalle-contenido .total-line {
+    background: rgba(201, 168, 76, 0.15);
+    font-weight: 700;
+    color: #c9a84c;
+}
+.detalle-vacio {
+    text-align: center;
+    padding: 40px;
+    color: #8a7a6a;
+    font-style: italic;
+}
+
+/* Modo claro - detalle */
+body.modo-claro .detalle-contenido { color: #2c1a12; }
+body.modo-claro .detalle-contenido th { background: #e8d0a8; color: #2c1a12; }
+body.modo-claro .detalle-contenido td { color: #2c1a12; border-bottom-color: rgba(106, 74, 42, 0.15); }
+body.modo-claro .detalle-contenido tr:hover td { background: #faf5ea; }
+body.modo-claro .detalle-contenido .total-line { background: #e8d0a8; color: #6a4a2a; }
