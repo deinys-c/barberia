@@ -5,7 +5,6 @@ from database import get_db
 from helpers import es_dia_habil
 
 def obtener_duracion_servicio(servicio_id):
-    """Devuelve la duración en minutos del servicio."""
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute('SELECT duracion_minutos FROM servicios WHERE id = %s AND activo = 1', (servicio_id,))
@@ -13,15 +12,76 @@ def obtener_duracion_servicio(servicio_id):
     conn.close()
     return row['duracion_minutos'] if row else 30
 
+def _parse_hora(valor, default):
+    """Parsea una hora de forma segura."""
+    if not valor:
+        return default
+    s = str(valor).strip()
+    try:
+        return datetime.strptime(s, '%H:%M')
+    except ValueError:
+        # Intentar con segundos (ej. '13:00:00')
+        try:
+            return datetime.strptime(s[:5], '%H:%M')
+        except ValueError:
+            return default
+
+def _generar_horas_barbero(barbero):
+    """Genera las horas candidatas (cada 30 min) respetando horario y pausa."""
+    h_inicio = _parse_hora(barbero.get('hora_inicio'), datetime.strptime('08:00', '%H:%M'))
+    h_fin = _parse_hora(barbero.get('hora_fin'), datetime.strptime('17:00', '%H:%M'))
+    
+    pausa_ini = None
+    pausa_fin = None
+    p_ini_raw = barbero.get('pausa_inicio')
+    p_fin_raw = barbero.get('pausa_fin')
+    if p_ini_raw and p_fin_raw:
+        try:
+            pausa_ini = _parse_hora(p_ini_raw, None)
+            pausa_fin = _parse_hora(p_fin_raw, None)
+        except Exception:
+            pausa_ini = None
+            pausa_fin = None
+    
+    horas = []
+    actual = h_inicio
+    while actual < h_fin:
+        # ¿Estamos en el bloque de pausa?
+        if pausa_ini and pausa_fin and pausa_ini <= actual < pausa_fin:
+            actual = pausa_fin
+            continue
+        # Solo agregar si cabe un bloque completo de 30 min
+        if actual + timedelta(minutes=30) <= h_fin:
+            horas.append(actual.strftime('%H:%M'))
+        actual += timedelta(minutes=30)
+    
+    return horas
+
+def _horas_ocupadas(cursor, barbero_id, fecha_str):
+    cursor.execute('''
+        SELECT hora_inicio, hora_fin FROM citas 
+        WHERE barbero_id = %s AND fecha = %s 
+        AND estado IN ('confirmada', 'pendiente_confirmacion')
+    ''', (barbero_id, fecha_str))
+    ocupadas = set()
+    for c in cursor.fetchall():
+        ini = datetime.strptime(c['hora_inicio'], '%H:%M')
+        fin = datetime.strptime(c['hora_fin'], '%H:%M')
+        actual = ini
+        while actual < fin:
+            ocupadas.add(actual.strftime('%H:%M'))
+            actual += timedelta(minutes=30)
+    return ocupadas
+
+def _esta_libre(hora_inicio_str, bloques_necesarios, horas_ocupadas, horas_validas):
+    base = datetime.strptime(hora_inicio_str, '%H:%M')
+    for i in range(bloques_necesarios):
+        bloque = (base + timedelta(minutes=30*i)).strftime('%H:%M')
+        if bloque not in horas_validas or bloque in horas_ocupadas:
+            return False
+    return True
+
 def calcular_huecos_libres(fecha_str, barbero_id=0, servicio_id=0):
-    """
-    Calcula los huecos libres teniendo en cuenta:
-    - El horario del barbero (hora_inicio, hora_fin)
-    - Los días de trabajo del barbero
-    - Los bloqueos del barbero
-    - Las citas ya agendadas (con su duración real)
-    - La duración del nuevo servicio a reservar
-    """
     conn = get_db()
     cursor = conn.cursor()
 
@@ -33,126 +93,57 @@ def calcular_huecos_libres(fecha_str, barbero_id=0, servicio_id=0):
     dia_semana = fecha.weekday()
     dia_actual_nombre = DIAS_ES[dia_semana]
 
-    # Duración del servicio que se quiere reservar
     duracion_nuevo = obtener_duracion_servicio(servicio_id) if servicio_id > 0 else 30
-    bloques_necesarios = (duracion_nuevo + 29) // 30  # Cuántos bloques de 30 min ocupa
+    bloques_necesarios = (duracion_nuevo + 29) // 30
 
-    def generar_horas_barbero(b):
-        """Genera todas las horas candidatas (cada 30 min) según el horario del barbero."""
-        h_inicio = b.get('hora_inicio', '08:00') or '08:00'
-        h_fin = b.get('hora_fin', '17:00') or '17:00'
-        horas = []
-        actual = datetime.strptime(h_inicio, '%H:%M')
-        fin = datetime.strptime(h_fin, '%H:%M')
-        # Bloques de la mañana y tarde
-        while actual <= fin:
-            horas.append(actual.strftime('%H:%M'))
-            actual += timedelta(minutes=30)
-        return horas
-
-    def esta_libre(hora_inicio_str, barbero_id_local, horas_ocupadas):
-        """
-        Verifica si el hueco está libre por completo, considerando la duración.
-        Se necesitan 'bloques_necesarios' bloques consecutivos libres.
-        """
-        # Convertir a datetime
-        base = datetime.strptime(hora_inicio_str, '%H:%M')
-        for i in range(bloques_necesarios):
-            bloque = (base + timedelta(minutes=30*i)).strftime('%H:%M')
-            if bloque in horas_ocupadas:
-                return False
-        return True
-
-    if barbero_id > 0:
-        # Barbero específico
-        cursor.execute('SELECT hora_inicio, hora_fin, dias_trabajo FROM barberos WHERE id = %s AND activo = 1', (barbero_id,))
-        barbero = cursor.fetchone()
-        if not barbero:
-            conn.close()
-            return []
+    def procesar_barbero(b):
         try:
-            dias = json.loads(barbero['dias_trabajo'])
+            dias = json.loads(b['dias_trabajo'])
         except (json.JSONDecodeError, TypeError):
             dias = DIAS_ES[:6]
         if dia_actual_nombre not in dias:
-            conn.close()
             return []
-        # Verificar bloqueos
+
         cursor.execute('''
             SELECT 1 FROM bloqueos 
             WHERE barbero_id = %s AND activo = 1 
             AND fecha_inicio <= %s AND fecha_fin >= %s
-        ''', (barbero_id, fecha_str, fecha_str))
+        ''', (b['id'], fecha_str, fecha_str))
         if cursor.fetchone():
-            conn.close()
             return []
 
-        # Horas ocupadas por citas existentes (considerando su duración real)
-        cursor.execute('''
-            SELECT hora_inicio, hora_fin FROM citas 
-            WHERE barbero_id = %s AND fecha = %s 
-            AND estado IN ('confirmada', 'pendiente_confirmacion')
-        ''', (barbero_id, fecha_str))
-        ocupadas = set()
-        for c in cursor.fetchall():
-            ini = datetime.strptime(c['hora_inicio'], '%H:%M')
-            fin = datetime.strptime(c['hora_fin'], '%H:%M')
-            actual = ini
-            while actual < fin:
-                ocupadas.add(actual.strftime('%H:%M'))
-                actual += timedelta(minutes=30)
+        # Convertir a dict normal para acceder con .get()
+        b_dict = dict(b)
+        horas_validas = set(_generar_horas_barbero(b_dict))
+        horas_ocupadas = _horas_ocupadas(cursor, b['id'], fecha_str)
 
-        todas = generar_horas_barbero(dict(barbero))
-        disponibles = [h for h in todas if esta_libre(h, barbero_id, ocupadas)]
-    else:
-        # Cualquier barbero
-        cursor.execute('SELECT id, hora_inicio, hora_fin, dias_trabajo FROM barberos WHERE activo = 1')
-        barberos = cursor.fetchall()
-        if not barberos:
-            conn.close()
-            return []
-        barberos_hoy = []
-        for b in barberos:
-            try:
-                dias = json.loads(b['dias_trabajo'])
-            except (json.JSONDecodeError, TypeError):
-                dias = DIAS_ES[:6]
-            if dia_actual_nombre not in dias:
-                continue
-            cursor.execute('''
-                SELECT 1 FROM bloqueos 
-                WHERE barbero_id = %s AND activo = 1 
-                AND fecha_inicio <= %s AND fecha_fin >= %s
-            ''', (b['id'], fecha_str, fecha_str))
-            if cursor.fetchone():
-                continue
-            barberos_hoy.append(dict(b))
-
-        if not barberos_hoy:
-            conn.close()
-            return []
-
-        # Para cada barbero, calcular sus ocupadas
         disponibles = []
-        for b in barberos_hoy:
-            cursor.execute('''
-                SELECT hora_inicio, hora_fin FROM citas 
-                WHERE barbero_id = %s AND fecha = %s 
-                AND estado IN ('confirmada', 'pendiente_confirmacion')
-            ''', (b['id'], fecha_str))
-            ocupadas = set()
-            for c in cursor.fetchall():
-                ini = datetime.strptime(c['hora_inicio'], '%H:%M')
-                fin = datetime.strptime(c['hora_fin'], '%H:%M')
-                actual = ini
-                while actual < fin:
-                    ocupadas.add(actual.strftime('%H:%M'))
-                    actual += timedelta(minutes=30)
-            todas = generar_horas_barbero(b)
-            for h in todas:
-                if esta_libre(h, b['id'], ocupadas):
-                    if h not in disponibles:
-                        disponibles.append(h)
+        for h in sorted(horas_validas):
+            if _esta_libre(h, bloques_necesarios, horas_ocupadas, horas_validas):
+                disponibles.append(h)
+        return disponibles
+
+    if barbero_id > 0:
+        cursor.execute('''
+            SELECT id, hora_inicio, hora_fin, pausa_inicio, pausa_fin, dias_trabajo 
+            FROM barberos WHERE id = %s AND activo = 1
+        ''', (barbero_id,))
+        barbero = cursor.fetchone()
+        if not barbero:
+            conn.close()
+            return []
+        resultado = procesar_barbero(barbero)
+    else:
+        cursor.execute('''
+            SELECT id, hora_inicio, hora_fin, pausa_inicio, pausa_fin, dias_trabajo 
+            FROM barberos WHERE activo = 1
+        ''')
+        barberos = cursor.fetchall()
+        resultado = []
+        for b in barberos:
+            for h in procesar_barbero(b):
+                if h not in resultado:
+                    resultado.append(h)
 
     conn.close()
-    return sorted(set(disponibles))
+    return sorted(set(resultado))
