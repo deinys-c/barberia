@@ -691,3 +691,153 @@ def backup_telegram():
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+    
+# ========== ESTADÍSTICAS ==========
+@admin_bp.route('/api/admin/estadisticas', methods=['GET'])
+def estadisticas():
+    """Devuelve estadísticas para el dashboard."""
+    user, error, code = requiere_admin()
+    if error: return error, code
+    try:
+        from datetime import datetime, timedelta
+        from config import DIAS_ES
+        
+        conn = get_db()
+        cursor = conn.cursor()
+        
+        # Fecha actual en Venezuela
+        hoy = ahora_ve()
+        
+        # ========== 1. CITAS E INGRESOS POR MES (últimos 6 meses) ==========
+        citas_mes = []
+        ingresos_mes = []
+        etiquetas_mes = []
+        
+        meses_es = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 
+                    'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
+        
+        for i in range(5, -1, -1):
+            # Calcular el mes
+            mes_actual = hoy.month - i
+            anio_actual = hoy.year
+            while mes_actual <= 0:
+                mes_actual += 12
+                anio_actual -= 1
+            
+            primer_dia = f"{anio_actual}-{mes_actual:02d}-01"
+            if mes_actual == 12:
+                ultimo_dia = f"{anio_actual}-12-31"
+            else:
+                ultimo_dia = f"{anio_actual}-{mes_actual+1:02d}-01"
+            
+            # Contar citas del mes (cualquier estado excepto canceladas)
+            cursor.execute('''
+                SELECT COUNT(*) as cnt 
+                FROM citas 
+                WHERE fecha >= %s AND fecha < %s
+                AND estado != 'cancelada_por_cliente' 
+                AND estado != 'cancelada_por_barbero'
+                AND estado != 'cancelada_por_sistema'
+                AND estado != 'expirada'
+            ''', (primer_dia, ultimo_dia))
+            cantidad = cursor.fetchone()['cnt']
+            citas_mes.append(cantidad)
+            
+            # Sumar ingresos estimados (precio de servicios de esas citas)
+            cursor.execute('''
+                SELECT COALESCE(SUM(s.precio), 0) as total
+                FROM citas c
+                JOIN servicios s ON c.servicio_id = s.id
+                WHERE c.fecha >= %s AND c.fecha < %s
+                AND c.estado NOT IN ('cancelada_por_cliente', 'cancelada_por_barbero', 
+                                     'cancelada_por_sistema', 'expirada')
+            ''', (primer_dia, ultimo_dia))
+            ingresos = float(cursor.fetchone()['total'])
+            ingresos_mes.append(ingresos)
+            
+            etiquetas_mes.append(f"{meses_es[mes_actual-1]} {anio_actual}")
+        
+        # ========== 2. CITAS POR BARBERO (todos los tiempos) ==========
+        cursor.execute('''
+            SELECT b.nombre, COUNT(c.id) as total
+            FROM barberos b
+            LEFT JOIN citas c ON c.barbero_id = b.id
+            WHERE b.activo = 1
+            GROUP BY b.id, b.nombre
+            ORDER BY total DESC
+        ''')
+        barberos_data = cursor.fetchall()
+        barberos_nombres = [b['nombre'] for b in barberos_data]
+        barberos_cantidades = [b['total'] for b in barberos_data]
+        
+        # ========== 3. TOP 5 CLIENTES FRECUENTES ==========
+        cursor.execute('''
+            SELECT cl.nombre, cl.telefono, COUNT(c.id) as total_citas
+            FROM clientes cl
+            JOIN citas c ON c.cliente_id = cl.id
+            WHERE c.estado NOT IN ('cancelada_por_cliente', 'cancelada_por_barbero', 
+                                   'cancelada_por_sistema', 'expirada')
+            GROUP BY cl.id, cl.nombre, cl.telefono
+            ORDER BY total_citas DESC
+            LIMIT 5
+        ''')
+        clientes_top = [dict(c) for c in cursor.fetchall()]
+        
+        # ========== 4. RESUMEN GENERAL ==========
+        # Total citas del mes actual
+        primer_dia_mes = f"{hoy.year}-{hoy.month:02d}-01"
+        cursor.execute('''
+            SELECT COUNT(*) as cnt FROM citas 
+            WHERE fecha >= %s
+            AND estado NOT IN ('cancelada_por_cliente', 'cancelada_por_barbero', 
+                               'cancelada_por_sistema', 'expirada')
+        ''', (primer_dia_mes,))
+        citas_mes_actual = cursor.fetchone()['cnt']
+        
+        # Total citas históricas
+        cursor.execute('''
+            SELECT COUNT(*) as cnt FROM citas 
+            WHERE estado NOT IN ('cancelada_por_cliente', 'cancelada_por_barbero', 
+                                 'cancelada_por_sistema', 'expirada')
+        ''')
+        citas_totales = cursor.fetchone()['cnt']
+        
+        # Total clientes
+        cursor.execute('SELECT COUNT(*) as cnt FROM clientes')
+        total_clientes = cursor.fetchone()['cnt']
+        
+        # Total ingresos históricos
+        cursor.execute('''
+            SELECT COALESCE(SUM(s.precio), 0) as total
+            FROM citas c
+            JOIN servicios s ON c.servicio_id = s.id
+            WHERE c.estado NOT IN ('cancelada_por_cliente', 'cancelada_por_barbero', 
+                                   'cancelada_por_sistema', 'expirada')
+        ''')
+        ingresos_totales = float(cursor.fetchone()['total'])
+        
+        conn.close()
+        
+        return jsonify({
+            'citas_mes': {
+                'etiquetas': etiquetas_mes,
+                'valores': citas_mes
+            },
+            'ingresos_mes': {
+                'etiquetas': etiquetas_mes,
+                'valores': ingresos_mes
+            },
+            'barberos': {
+                'nombres': barberos_nombres,
+                'cantidades': barberos_cantidades
+            },
+            'clientes_top': clientes_top,
+            'resumen': {
+                'citas_mes_actual': citas_mes_actual,
+                'citas_totales': citas_totales,
+                'total_clientes': total_clientes,
+                'ingresos_totales': ingresos_totales
+            }
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
