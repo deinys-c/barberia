@@ -27,28 +27,40 @@ def listar_barberos_publico():
 
 @public_bp.route('/api/servicios', methods=['GET'])
 def listar_servicios_publico():
-    """Devuelve los servicios de un barbero específico o de todos."""
     barbero_id = request.args.get('barbero_id', 0, type=int)
     try:
         conn = get_db()
         cursor = conn.cursor()
         if barbero_id > 0:
+            # Servicios de un barbero específico
             cursor.execute('''
-                SELECT s.id, s.nombre, s.duracion_minutos, s.precio, s.descripcion, s.barbero_id
-                FROM servicios s
-                WHERE s.activo = 1 AND s.barbero_id = %s
-                ORDER BY s.id
+                SELECT id, nombre, duracion_minutos, precio, descripcion, barbero_id
+                FROM servicios WHERE activo = 1 AND barbero_id = %s
+                ORDER BY id
             ''', (barbero_id,))
+            servicios = [dict(s) for s in cursor.fetchall()]
         else:
+            # Cuando es "Cualquiera": usar servicios de un barbero representativo
+            # (el primero activo que tenga servicios)
             cursor.execute('''
-                SELECT s.id, s.nombre, s.duracion_minutos, s.precio, s.descripcion, s.barbero_id
-                FROM servicios s
-                WHERE s.activo = 1
-                ORDER BY s.barbero_id, s.id
+                SELECT DISTINCT barbero_id 
+                FROM servicios WHERE activo = 1 
+                ORDER BY barbero_id 
+                LIMIT 1
             ''')
-        servicios = cursor.fetchall()
+            row = cursor.fetchone()
+            if row:
+                bid_ref = row['barbero_id']
+                cursor.execute('''
+                    SELECT id, nombre, duracion_minutos, precio, descripcion, barbero_id
+                    FROM servicios WHERE activo = 1 AND barbero_id = %s
+                    ORDER BY id
+                ''', (bid_ref,))
+                servicios = [dict(s) for s in cursor.fetchall()]
+            else:
+                servicios = []
         conn.close()
-        return jsonify([dict(s) for s in servicios])
+        return jsonify(servicios)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 

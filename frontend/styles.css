@@ -172,15 +172,33 @@ select option { background: #1a1410; color: #f0d5a8; }
 .panel-tab { animation: fadeIn 0.3s ease; }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
-body.modo-claro { background: #f5f0e8; background-image: none; color: #1a1410; }
-body.modo-claro .header { background: linear-gradient(135deg, #f0e0c0, #e8d0a8); border-bottom-color: #8b6a1a; }
-body.modo-claro .header h1 { color: #2c1a12; }
-body.modo-claro .header h1 span { color: #8b6a1a; }
-body.modo-claro .header .slogan { color: #6a4a2a; }
-body.modo-claro .panel { background: rgba(255, 255, 255, 0.95); border-color: rgba(139, 106, 26, 0.2); }
-body.modo-claro .panel h2, body.modo-claro .panel h3 { color: #2c1a12; }
-body.modo-claro label { color: #6a4a2a; }
-body.modo-claro input, body.modo-claro select, body.modo-claro textarea { background: rgba(255,255,255,0.9); border-color: rgba(139, 106, 26, 0.3); color: #2c1a12; }
-body.modo-claro .cita-item { background: rgba(0,0,0,0.03); }
-body.modo-claro .cita-item .info .fecha-hora { color: #2c1a12; }
-body.modo-claro .cita-item .info .servicio { color: #8b6a1a; }
+/* ===== MODO CLARO - CORRECCIONES ===== */
+body.modo-claro .tabs button {
+    background: rgba(0,0,0,0.05);
+    color: #6a4a2a;
+    border: 1px solid rgba(139, 106, 26, 0.2);
+}
+body.modo-claro .tabs button:hover {
+    color: #2c1a12;
+    background: rgba(139, 106, 26, 0.15);
+}
+body.modo-claro .tabs button.activo {
+    color: #2c1a12;
+    background: #e8d0a8;
+    border-bottom-color: #8b6a1a;
+    font-weight: 700;
+}
+
+body.modo-claro .header-actions button {
+    background: rgba(139, 106, 26, 0.15);
+    border: 1px solid #8b6a1a;
+    color: #2c1a12;
+}
+body.modo-claro .header-actions button:hover {
+    background: #8b6a1a;
+    color: #f5f0e8;
+}
+body.modo-claro .header-actions button.activo {
+    background: #8b6a1a;
+    color: #f5f0e8;
+}
