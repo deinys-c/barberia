@@ -601,3 +601,63 @@ def cambiar_password():
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+# ========== BACKUP ==========
+@admin_bp.route('/api/admin/backup', methods=['GET'])
+def backup_db():
+    """Genera un backup completo de la base de datos en JSON."""
+    token = request.args.get('token', '')
+    # Token especial para cron jobs, o sesión de admin
+    user, _, _ = requiere_autenticacion()
+    if token != 'backup2026' and not (user and user['rol'] == 'admin'):
+        return jsonify({'error': 'No autorizado'}), 403
+    try:
+        from datetime import datetime
+        conn = get_db()
+        cursor = conn.cursor()
+        
+        backup = {
+            'fecha_backup': datetime.now().isoformat(),
+            'version': '1.0',
+            'datos': {}
+        }
+        
+        # Tablas a respaldar
+        tablas = ['barberos', 'servicios', 'clientes', 'citas', 'bloqueos', 
+                  'usuarios', 'catalogo', 'logs_notificaciones']
+        
+        for tabla in tablas:
+            try:
+                cursor.execute(f'SELECT * FROM {tabla}')
+                rows = cursor.fetchall()
+                backup['datos'][tabla] = [dict(r) for r in rows]
+            except Exception as e:
+                backup['datos'][tabla] = []
+                backup['datos'][f'{tabla}_error'] = str(e)
+        
+        conn.close()
+        
+        # Convertir a JSON con formato legible
+        from flask import Response
+        import json as json_lib
+        
+        json_str = json_lib.dumps(backup, indent=2, default=str, ensure_ascii=False)
+        fecha = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+        
+        # Si se pide como descarga, devolver archivo
+        if request.args.get('descargar') == 'si':
+            return Response(
+                json_str,
+                mimetype='application/json',
+                headers={
+                    'Content-Disposition': f'attachment; filename=backup_barberia_{fecha}.json'
+                }
+            )
+        
+        return jsonify({
+            'mensaje': '✅ Backup generado',
+            'fecha': fecha,
+            'tablas': {k: len(v) if isinstance(v, list) else 0 for k, v in backup['datos'].items() if not k.endswith('_error')}
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
