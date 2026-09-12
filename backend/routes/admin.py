@@ -842,29 +842,129 @@ def estadisticas():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
     
-# ========== RESET ADMIN (TEMPORAL) ==========
-@admin_bp.route('/api/admin/reset-admin', methods=['GET'])
-def reset_admin():
-    """⚠️ TEMPORAL: Resetea la contraseña del admin. Se eliminará después."""
+# ========== ESTADISTICAS SIN LOGIN (TEMPORAL) ==========
+@admin_bp.route('/api/admin/estadisticas-test', methods=['GET'])
+def estadisticas_test():
+    """⚠️ TEMPORAL: Estadísticas sin login para pruebas."""
     import os
     token = request.args.get('token', '')
-    TOKEN_RESET = os.environ.get('RESET_TOKEN', 'reset2026temp')
-    if token != TOKEN_RESET:
+    TOKEN_TEST = os.environ.get('RESET_TOKEN', 'reset2026temp')
+    if token != TOKEN_TEST:
         return jsonify({'error': 'Token inválido'}), 403
-    nueva = request.args.get('nueva', '')
-    if not nueva or len(nueva) < 6:
-        return jsonify({'error': 'Mínimo 6 caracteres'}), 400
+    # Reutilizar la lógica de estadísticas
     try:
-        from werkzeug.security import generate_password_hash
+        from datetime import datetime, timedelta
+        
         conn = get_db()
         cursor = conn.cursor()
-        pwd_hash = generate_password_hash(nueva)
-        cursor.execute("UPDATE usuarios SET password_hash = %s WHERE username = 'admin'", (pwd_hash,))
-        conn.commit()
+        hoy = ahora_ve()
+        
+        meses_es = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 
+                    'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
+        
+        citas_mes = []
+        ingresos_mes = []
+        etiquetas_mes = []
+        
+        for i in range(5, -1, -1):
+            mes_actual = hoy.month - i
+            anio_actual = hoy.year
+            while mes_actual <= 0:
+                mes_actual += 12
+                anio_actual -= 1
+            
+            primer_dia = f"{anio_actual}-{mes_actual:02d}-01"
+            if mes_actual == 12:
+                ultimo_dia = f"{anio_actual}-12-31"
+            else:
+                ultimo_dia = f"{anio_actual}-{mes_actual+1:02d}-01"
+            
+            cursor.execute('''
+                SELECT COUNT(*) as cnt 
+                FROM citas 
+                WHERE fecha >= %s AND fecha < %s
+                AND estado NOT IN ('cancelada_por_cliente', 'cancelada_por_barbero', 
+                                   'cancelada_por_sistema', 'expirada')
+            ''', (primer_dia, ultimo_dia))
+            citas_mes.append(cursor.fetchone()['cnt'])
+            
+            cursor.execute('''
+                SELECT COALESCE(SUM(s.precio), 0) as total
+                FROM citas c
+                JOIN servicios s ON c.servicio_id = s.id
+                WHERE c.fecha >= %s AND c.fecha < %s
+                AND c.estado NOT IN ('cancelada_por_cliente', 'cancelada_por_barbero', 
+                                     'cancelada_por_sistema', 'expirada')
+            ''', (primer_dia, ultimo_dia))
+            ingresos_mes.append(float(cursor.fetchone()['total']))
+            etiquetas_mes.append(f"{meses_es[mes_actual-1]} {anio_actual}")
+        
+        cursor.execute('''
+            SELECT b.nombre, COUNT(c.id) as total
+            FROM barberos b
+            LEFT JOIN citas c ON c.barbero_id = b.id
+            WHERE b.activo = 1
+            GROUP BY b.id, b.nombre
+            ORDER BY total DESC
+        ''')
+        barberos_data = cursor.fetchall()
+        
+        cursor.execute('''
+            SELECT cl.nombre, cl.telefono, COUNT(c.id) as total_citas
+            FROM clientes cl
+            JOIN citas c ON c.cliente_id = cl.id
+            WHERE c.estado NOT IN ('cancelada_por_cliente', 'cancelada_por_barbero', 
+                                   'cancelada_por_sistema', 'expirada')
+            GROUP BY cl.id, cl.nombre, cl.telefono
+            ORDER BY total_citas DESC
+            LIMIT 5
+        ''')
+        clientes_top = [dict(c) for c in cursor.fetchall()]
+        
+        primer_dia_mes = f"{hoy.year}-{hoy.month:02d}-01"
+        cursor.execute('''
+            SELECT COUNT(*) as cnt FROM citas 
+            WHERE fecha >= %s
+            AND estado NOT IN ('cancelada_por_cliente', 'cancelada_por_barbero', 
+                               'cancelada_por_sistema', 'expirada')
+        ''', (primer_dia_mes,))
+        citas_mes_actual = cursor.fetchone()['cnt']
+        
+        cursor.execute('''
+            SELECT COUNT(*) as cnt FROM citas 
+            WHERE estado NOT IN ('cancelada_por_cliente', 'cancelada_por_barbero', 
+                                 'cancelada_por_sistema', 'expirada')
+        ''')
+        citas_totales = cursor.fetchone()['cnt']
+        
+        cursor.execute('SELECT COUNT(*) as cnt FROM clientes')
+        total_clientes = cursor.fetchone()['cnt']
+        
+        cursor.execute('''
+            SELECT COALESCE(SUM(s.precio), 0) as total
+            FROM citas c
+            JOIN servicios s ON c.servicio_id = s.id
+            WHERE c.estado NOT IN ('cancelada_por_cliente', 'cancelada_por_barbero', 
+                                   'cancelada_por_sistema', 'expirada')
+        ''')
+        ingresos_totales = float(cursor.fetchone()['total'])
+        
         conn.close()
+        
         return jsonify({
-            'mensaje': '✅ Contraseña del admin cambiada',
-            'nueva': nueva
+            'citas_mes': {'etiquetas': etiquetas_mes, 'valores': citas_mes},
+            'ingresos_mes': {'etiquetas': etiquetas_mes, 'valores': ingresos_mes},
+            'barberos': {
+                'nombres': [b['nombre'] for b in barberos_data],
+                'cantidades': [b['total'] for b in barberos_data]
+            },
+            'clientes_top': clientes_top,
+            'resumen': {
+                'citas_mes_actual': citas_mes_actual,
+                'citas_totales': citas_totales,
+                'total_clientes': total_clientes,
+                'ingresos_totales': ingresos_totales
+            }
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
