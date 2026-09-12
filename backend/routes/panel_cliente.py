@@ -112,7 +112,13 @@ def rechazar_cita():
     try:
         conn = get_db()
         cursor = conn.cursor()
-        cursor.execute('SELECT estado, barbero_id FROM citas WHERE id = %s', (cita_id,))
+        cursor.execute('''
+            SELECT c.estado, c.barbero_id, c.fecha, c.hora_inicio, 
+                   cl.nombre as cliente, cl.telefono as cliente_telefono
+            FROM citas c
+            JOIN clientes cl ON c.cliente_id = cl.id
+            WHERE c.id = %s
+        ''', (cita_id,))
         cita = cursor.fetchone()
         if not cita:
             conn.close()
@@ -127,7 +133,14 @@ def rechazar_cita():
         conn.commit()
         conn.close()
         enviar_telegram(f"❌ Cita #{cita_id} rechazada por {user['username']}")
-        return jsonify({'mensaje': 'Rechazada'})
+        return jsonify({
+            'mensaje': 'Rechazada',
+            'cliente': cita['cliente'],
+            'cliente_telefono': cita['cliente_telefono'],
+            'fecha': cita['fecha'],
+            'hora_inicio': cita['hora_inicio'],
+            'accion': 'rechazar'
+        })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -142,7 +155,13 @@ def cancelar_cita_confirmada():
     try:
         conn = get_db()
         cursor = conn.cursor()
-        cursor.execute('SELECT estado, fecha, barbero_id FROM citas WHERE id = %s', (cita_id,))
+        cursor.execute('''
+            SELECT c.estado, c.fecha, c.hora_inicio, c.barbero_id,
+                   cl.nombre as cliente, cl.telefono as cliente_telefono
+            FROM citas c
+            JOIN clientes cl ON c.cliente_id = cl.id
+            WHERE c.id = %s
+        ''', (cita_id,))
         cita = cursor.fetchone()
         if not cita:
             conn.close()
@@ -160,7 +179,14 @@ def cancelar_cita_confirmada():
         conn.commit()
         conn.close()
         enviar_telegram(f"🚫 Cita #{cita_id} cancelada por {user['username']}")
-        return jsonify({'mensaje': 'Cancelada'})
+        return jsonify({
+            'mensaje': 'Cancelada',
+            'cliente': cita['cliente'],
+            'cliente_telefono': cita['cliente_telefono'],
+            'fecha': cita['fecha'],
+            'hora_inicio': cita['hora_inicio'],
+            'accion': 'cancelar'
+        })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -258,6 +284,8 @@ def mis_citas():
         conn = get_db()
         cursor = conn.cursor()
         hoy = ahora_ve().strftime('%Y-%m-%d')
+        # Últimos 7 días para mostrar canceladas recientes
+        hace_7_dias = (ahora_ve() - __import__('datetime').timedelta(days=7)).strftime('%Y-%m-%d')
         cursor.execute('''
             SELECT c.id, c.fecha, c.hora_inicio, c.hora_fin, c.estado, s.nombre as servicio,
                    b.nombre as barbero, c.alerta_cierre
@@ -265,10 +293,14 @@ def mis_citas():
             JOIN clientes cl ON c.cliente_id = cl.id
             JOIN servicios s ON c.servicio_id = s.id
             JOIN barberos b ON c.barbero_id = b.id
-            WHERE cl.telefono = %s AND c.fecha >= %s
-            AND c.estado IN ('confirmada', 'pendiente_confirmacion')
+            WHERE cl.telefono = %s 
+            AND (
+                (c.fecha >= %s AND c.estado IN ('confirmada', 'pendiente_confirmacion'))
+                OR
+                (c.fecha >= %s AND c.estado = 'cancelada_por_barbero')
+            )
             ORDER BY c.fecha, c.hora_inicio
-        ''', (telefono, hoy))
+        ''', (telefono, hoy, hace_7_dias))
         citas = cursor.fetchall()
         conn.close()
         return jsonify([dict(c) for c in citas])
