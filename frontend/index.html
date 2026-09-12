@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gocho Barber - Reserva de Citas</title>
     <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" media="print" onload="this.media='all'">
+    <noscript><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"></noscript>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
 <body>
@@ -16,28 +18,28 @@
             <div class="slogan">ESTILO · TRADICION · EXCELENCIA</div>
         </div>
         <div class="header-actions">
-            <button onclick="toggleModo()" title="Cambiar modo">🌓 Modo</button>
-            <button id="btnCliente" class="activo" onclick="cambiarVista('cliente')">Cliente</button>
-            <button id="btnBarbero" onclick="cambiarVista('barbero')">Panel</button>
+            <button onclick="toggleModo()" title="Cambiar modo"><i class="fa-solid fa-circle-half-stroke"></i> Modo</button>
+            <button id="btnCliente" class="activo" onclick="cambiarVista('cliente')"><i class="fa-solid fa-user"></i> Cliente</button>
+            <button id="btnBarbero" onclick="cambiarVista('barbero')"><i class="fa-solid fa-user-tie"></i> Panel</button>
         </div>
     </header>
 
     <div id="tabsCliente" class="tabs">
-        <button class="activo" onclick="cambiarTabCliente('reservar')">Reservar</button>
-        <button onclick="cambiarTabCliente('mis-citas')">Mis Citas</button>
-        <button onclick="cambiarTabCliente('productos')">Productos</button>
-        <button onclick="cambiarTabCliente('estilos')">Estilos</button>
+        <button class="activo" onclick="cambiarTabCliente('reservar')"><i class="fa-solid fa-calendar-plus"></i> Reservar</button>
+        <button onclick="cambiarTabCliente('mis-citas')"><i class="fa-solid fa-calendar-check"></i> Mis Citas</button>
+        <button onclick="cambiarTabCliente('productos')"><i class="fa-solid fa-box"></i> Productos</button>
+        <button onclick="cambiarTabCliente('estilos')"><i class="fa-solid fa-scissors"></i> Estilos</button>
     </div>
 
     <div id="tabsBarbero" class="tabs" style="display:none;">
-        <button class="activo" onclick="cambiarTabBarbero('pendientes')">Pendientes</button>
-        <button onclick="cambiarTabBarbero('historial')">Historial</button>
-        <button onclick="cambiarTabBarbero('barberos')" class="solo-admin" style="display:none;">Barberos</button>
-        <button onclick="cambiarTabBarbero('servicios')">Servicios</button>
-        <button onclick="cambiarTabBarbero('catalogo')" class="solo-admin" style="display:none;">Catalogo</button>
-        <button onclick="cambiarTabBarbero('estadisticas')" class="solo-admin" style="display:none;">Estadisticas</button>
-        <button onclick="cambiarTabBarbero('mis-estadisticas')" class="solo-barbero">Mis Estadisticas</button>
-        <button onclick="cambiarTabBarbero('configuracion')">Configuracion</button>
+        <button class="activo" onclick="cambiarTabBarbero('pendientes')"><i class="fa-solid fa-clock"></i> Pendientes</button>
+        <button onclick="cambiarTabBarbero('historial')"><i class="fa-solid fa-list"></i> Historial</button>
+        <button onclick="cambiarTabBarbero('barberos')" class="solo-admin" style="display:none;"><i class="fa-solid fa-users"></i> Barberos</button>
+        <button onclick="cambiarTabBarbero('servicios')"><i class="fa-solid fa-scissors"></i> Servicios</button>
+        <button onclick="cambiarTabBarbero('catalogo')" class="solo-admin" style="display:none;"><i class="fa-solid fa-images"></i> Catalogo</button>
+        <button onclick="cambiarTabBarbero('estadisticas')" class="solo-admin" style="display:none;"><i class="fa-solid fa-chart-line"></i> Estadisticas</button>
+        <button onclick="cambiarTabBarbero('mis-estadisticas')" class="solo-barbero"><i class="fa-solid fa-chart-simple"></i> Mis Estadisticas</button>
+        <button onclick="cambiarTabBarbero('configuracion')"><i class="fa-solid fa-gear"></i> Configuracion</button>
     </div>
 
     <!-- PANEL CLIENTE -->
@@ -58,7 +60,7 @@
                     <input type="date" id="fecha">
                 </div>
             </div>
-            <button class="btn" onclick="cargarHuecos()">Ver horas disponibles</button>
+            <button class="btn" onclick="cargarHuecos()"><i class="fa-solid fa-magnifying-glass"></i> Ver horas disponibles</button>
             <div id="huecosContainer" style="margin-top:15px;"><div id="huecos" class="huecos-grid"></div></div>
 
             <div id="formReserva" style="display:none; margin-top:20px; border-top: 1px solid rgba(201,168,76,0.15); padding-top:20px;">
@@ -68,7 +70,7 @@
                 </div>
                 <label>Notas (opcional)</label>
                 <textarea id="notas" rows="2" maxlength="500"></textarea>
-                <button class="btn" onclick="reservar()">Confirmar reserva</button>
+                <button class="btn" onclick="reservar()"><i class="fa-solid fa-circle-check"></i> Confirmar reserva</button>
                 <div id="mensajeReserva" class="mensaje"></div>
             </div>
         </div>
@@ -78,7 +80,7 @@
             <div class="row">
                 <div><label>Tu numero de telefono</label><input type="text" id="telefonoConsulta" placeholder="0414-1234567" maxlength="20"></div>
             </div>
-            <button class="btn" onclick="consultarCitas()">Buscar mis citas</button>
+            <button class="btn" onclick="consultarCitas()"><i class="fa-solid fa-magnifying-glass"></i> Buscar mis citas</button>
             <div id="misCitas" style="margin-top:15px;"></div>
         </div>
 
@@ -99,14 +101,14 @@
             <h3>Acceso al Panel</h3>
             <input type="text" id="usernameLogin" placeholder="Usuario" maxlength="50" autocomplete="username">
             <input type="password" id="passwordLogin" placeholder="Contraseña" maxlength="50" autocomplete="current-password" onkeydown="if(event.key==='Enter') loginUsuario()">
-            <button class="btn" onclick="loginUsuario()">Ingresar</button>
+            <button class="btn" onclick="loginUsuario()"><i class="fa-solid fa-right-to-bracket"></i> Ingresar</button>
             <div id="mensajeLogin" class="mensaje"></div>
         </div>
 
         <div id="barberoContenido" style="display:none;">
             <div class="panel-header">
                 <h2>Panel de Control <small id="infoUsuario"></small></h2>
-                <button class="btn btn-secundario" onclick="logoutBarbero()">Cerrar sesion</button>
+                <button class="btn btn-secundario" onclick="logoutBarbero()"><i class="fa-solid fa-right-from-bracket"></i> Cerrar sesion</button>
             </div>
 
             <!-- PENDIENTES -->
@@ -119,7 +121,7 @@
                             <option value="0">Todos los barberos</option>
                         </select>
                     </div>
-                    <div><button class="btn btn-secundario" onclick="cargarPendientes()">Actualizar</button></div>
+                    <div><button class="btn btn-secundario" onclick="cargarPendientes()"><i class="fa-solid fa-rotate"></i> Actualizar</button></div>
                 </div>
                 <div id="pendientesLista" style="margin-top:15px;"></div>
             </div>
@@ -134,7 +136,7 @@
                             <option value="0">Todos los barberos</option>
                         </select>
                     </div>
-                    <div><button class="btn btn-secundario" onclick="cargarHistorial()">Actualizar</button></div>
+                    <div><button class="btn btn-secundario" onclick="cargarHistorial()"><i class="fa-solid fa-rotate"></i> Actualizar</button></div>
                 </div>
                 <div id="historialLista" style="margin-top:15px;"></div>
             </div>
@@ -142,7 +144,7 @@
             <!-- BARBEROS (solo admin) -->
             <div id="tabBarberos" class="panel-tab" style="display:none;">
                 <h3>Gestion de Barberos</h3>
-                <button class="btn" onclick="abrirFormBarbero()">+ Nuevo Barbero</button>
+                <button class="btn" onclick="abrirFormBarbero()"><i class="fa-solid fa-plus"></i> Nuevo Barbero</button>
                 
                 <div id="formBarbero" style="display:none; background:rgba(255,255,255,0.03); padding:20px; border-radius:8px; margin-top:15px;">
                     <input type="hidden" id="barberoEditId">
@@ -158,10 +160,10 @@
                     </div>
                     <div class="row">
                         <div>
-                            <label>¿Tiene pausa?</label>
+                            <label>Tiene pausa?</label>
                             <select id="barberoConPausa" onchange="toggleCamposPausa()">
                                 <option value="no">No</option>
-                                <option value="si">Sí (para comer, descansar)</option>
+                                <option value="si">Si (para comer, descansar)</option>
                             </select>
                         </div>
                         <div id="campoPausaInicio" style="display:none;">
@@ -187,7 +189,7 @@
                         <label><input type="checkbox" class="dia-check" value="sabado" checked> Sabado</label>
                     </div>
                     <div style="margin-top:15px;">
-                        <button class="btn" onclick="guardarBarbero()">Guardar</button>
+                        <button class="btn" onclick="guardarBarbero()"><i class="fa-solid fa-floppy-disk"></i> Guardar</button>
                         <button class="btn btn-secundario" onclick="cerrarFormBarbero()">Cancelar</button>
                     </div>
                     <div id="mensajeBarbero" class="mensaje"></div>
@@ -207,7 +209,7 @@
                     </div>
                 </div>
 
-                <button class="btn" onclick="abrirFormServicio()">+ Nuevo Servicio</button>
+                <button class="btn" onclick="abrirFormServicio()"><i class="fa-solid fa-plus"></i> Nuevo Servicio</button>
                 
                 <div id="formServicio" style="display:none; background:rgba(255,255,255,0.03); padding:20px; border-radius:8px; margin-top:15px;">
                     <input type="hidden" id="servicioEditId">
@@ -220,7 +222,7 @@
                         <div><label>Descripcion (opcional)</label><input type="text" id="servicioDescripcion" placeholder="Breve descripcion" maxlength="200"></div>
                     </div>
                     <div style="margin-top:15px;">
-                        <button class="btn" onclick="guardarServicio()">Guardar</button>
+                        <button class="btn" onclick="guardarServicio()"><i class="fa-solid fa-floppy-disk"></i> Guardar</button>
                         <button class="btn btn-secundario" onclick="cerrarFormServicio()">Cancelar</button>
                     </div>
                     <div id="mensajeServicio" class="mensaje"></div>
@@ -232,7 +234,7 @@
             <!-- CATALOGO (solo admin) -->
             <div id="tabCatalogo" class="panel-tab" style="display:none;">
                 <h3>Catalogo: Productos y Estilos</h3>
-                <button class="btn" onclick="abrirFormItem()">+ Nuevo Item</button>
+                <button class="btn" onclick="abrirFormItem()"><i class="fa-solid fa-plus"></i> Nuevo Item</button>
                 
                 <div id="formItem" style="display:none; background:rgba(255,255,255,0.03); padding:20px; border-radius:8px; margin-top:15px;">
                     <input type="hidden" id="itemEditId">
@@ -255,7 +257,7 @@
                     <label>Orden (numero)</label>
                     <input type="number" id="itemOrden" value="0" min="0" max="999">
                     <div style="margin-top:15px;">
-                        <button class="btn" onclick="guardarItem()">Guardar</button>
+                        <button class="btn" onclick="guardarItem()"><i class="fa-solid fa-floppy-disk"></i> Guardar</button>
                         <button class="btn btn-secundario" onclick="cerrarFormItem()">Cancelar</button>
                     </div>
                     <div id="mensajeItem" class="mensaje"></div>
@@ -364,7 +366,7 @@
                     </div>
                     <label>Motivo</label>
                     <input type="text" id="bloqueoMotivo" maxlength="100">
-                    <button class="btn" onclick="bloquearDias()">Bloquear</button>
+                    <button class="btn" onclick="bloquearDias()"><i class="fa-solid fa-ban"></i> Bloquear</button>
                     <div id="mensajeBloqueo" class="mensaje"></div>
                 </div>
             </div>

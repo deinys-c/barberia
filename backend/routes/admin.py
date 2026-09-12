@@ -816,14 +816,22 @@ def estadisticas():
             cursor.execute(query_total)
         citas_totales = cursor.fetchone()['cnt']
         
-        # Clientes únicos (que hayan tenido citas con este barbero, o todos si es admin)
+        # Clientes únicos (solo los que tienen al menos una cita válida)
         if barbero_id > 0:
             cursor.execute('''
                 SELECT COUNT(DISTINCT c.cliente_id) as cnt
-                FROM citas c WHERE c.barbero_id = %s
+                FROM citas c 
+                WHERE c.barbero_id = %s
+                AND c.estado NOT IN ('cancelada_por_cliente', 'cancelada_por_barbero', 
+                                     'cancelada_por_sistema', 'expirada')
             ''', (barbero_id,))
         else:
-            cursor.execute('SELECT COUNT(*) as cnt FROM clientes')
+            cursor.execute('''
+                SELECT COUNT(DISTINCT c.cliente_id) as cnt
+                FROM citas c
+                WHERE c.estado NOT IN ('cancelada_por_cliente', 'cancelada_por_barbero', 
+                                       'cancelada_por_sistema', 'expirada')
+            ''')
         total_clientes = cursor.fetchone()['cnt']
         
         query_ing_total = '''
