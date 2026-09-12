@@ -202,3 +202,123 @@ body.modo-claro .header-actions button.activo {
     background: #8b6a1a;
     color: #f5f0e8;
 }
+
+/* ===== MODO CLARO - CORRECCIONES MÓVIL ===== */
+@media (max-width: 768px) {
+    body.modo-claro .tabs button {
+        background: rgba(139, 106, 26, 0.08) !important;
+        color: #2c1a12 !important;
+        border: 1px solid rgba(139, 106, 26, 0.2);
+    }
+    body.modo-claro .tabs button.activo {
+        background: #8b6a1a !important;
+        color: #f5f0e8 !important;
+    }
+    body.modo-claro .panel {
+        background: rgba(255, 255, 255, 0.98) !important;
+    }
+    body.modo-claro .panel h2,
+    body.modo-claro .panel h3 {
+        color: #2c1a12 !important;
+    }
+    body.modo-claro label {
+        color: #8b6a1a !important;
+        font-weight: 700;
+    }
+    body.modo-claro input,
+    body.modo-claro select,
+    body.modo-claro textarea {
+        background: #ffffff !important;
+        border: 1px solid #8b6a1a !important;
+        color: #2c1a12 !important;
+    }
+    body.modo-claro .cita-item {
+        background: rgba(139, 106, 26, 0.08) !important;
+        border-left-color: #8b6a1a !important;
+    }
+    body.modo-claro .cita-item .info .fecha-hora {
+        color: #2c1a12 !important;
+    }
+    body.modo-claro .cita-item .info .servicio {
+        color: #6a4a2a !important;
+    }
+    body.modo-claro .sin-huecos {
+        background: rgba(139, 106, 26, 0.05) !important;
+        color: #6a4a2a !important;
+        border-color: rgba(139, 106, 26, 0.3) !important;
+    }
+    body.modo-claro .huecos-grid button {
+        background: rgba(139, 106, 26, 0.1) !important;
+        color: #2c1a12 !important;
+        border: 1px solid #8b6a1a !important;
+    }
+    body.modo-claro .huecos-grid button.seleccionado {
+        background: #8b6a1a !important;
+        color: #f5f0e8 !important;
+    }
+    body.modo-claro .info-nota {
+        background: rgba(139, 106, 26, 0.1) !important;
+        color: #2c1a12 !important;
+    }
+    body.modo-claro .info-nota code {
+        background: #e8d0a8 !important;
+        color: #2c1a12 !important;
+    }
+    body.modo-claro .mensaje.exito {
+        background: rgba(42, 122, 74, 0.15) !important;
+        color: #1a5a2a !important;
+    }
+    body.modo-claro .mensaje.error {
+        background: rgba(139, 42, 42, 0.15) !important;
+        color: #6a1a1a !important;
+    }
+}
+
+/* ===== MODO CLARO - MEJORAS GENERALES ===== */
+body.modo-claro .tabs button {
+    background: rgba(139, 106, 26, 0.06);
+    color: #6a4a2a;
+}
+body.modo-claro .tabs button:hover {
+    background: rgba(139, 106, 26, 0.15);
+    color: #2c1a12;
+}
+body.modo-claro .tabs button.activo {
+    background: #e8d0a8;
+    color: #2c1a12;
+    border-bottom-color: #8b6a1a;
+    font-weight: 700;
+}
+
+body.modo-claro .header-actions button {
+    background: rgba(139, 106, 26, 0.1);
+    border: 1px solid #8b6a1a;
+    color: #2c1a12;
+}
+body.modo-claro .header-actions button:hover {
+    background: #8b6a1a;
+    color: #f5f0e8;
+}
+body.modo-claro .header-actions button.activo {
+    background: #8b6a1a;
+    color: #f5f0e8;
+}
+
+body.modo-claro .btn {
+    background: linear-gradient(135deg, #8b6a1a, #6a4a2a);
+    color: #f5f0e8;
+}
+body.modo-claro .btn-secundario {
+    background: rgba(139, 106, 26, 0.1);
+    color: #2c1a12;
+    border: 1px solid #8b6a1a;
+}
+body.modo-claro .btn-secundario:hover {
+    background: rgba(139, 106, 26, 0.2);
+}
+body.modo-claro .btn-danger {
+    background: #a03030;
+}
+body.modo-claro .btn-success {
+    background: #2a7a4a;
+}
