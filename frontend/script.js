@@ -24,6 +24,14 @@ window.imgError = function(img, nombre, tipo) {
     img.src = imgFallback(nombre, tipo);
 };
 
+// Helper: obtener fecha en zona horaria de Venezuela (UTC-4)
+function fechaVE(diasAdelante = 0) {
+    const ahora = new Date();
+    const ahoraVE = new Date(ahora.getTime() - (4 * 60 * 60 * 1000));
+    ahoraVE.setUTCDate(ahoraVE.getUTCDate() + diasAdelante);
+    return ahoraVE.toISOString().split('T')[0];
+}
+
 // ===== CATALOGO (Productos y Estilos) =====
 async function cargarProductos() {
     const contenedor = document.getElementById('productosContainer');
@@ -107,17 +115,12 @@ function esAdmin() {
 
 function actualizarUISegunRol() {
     const admin = esAdmin();
-    
-    // Tabs y elementos solo para admin
     document.querySelectorAll('.solo-admin').forEach(el => {
         el.style.setProperty('display', admin ? 'inline-block' : 'none', 'important');
     });
-    
-    // Tabs y elementos solo para barbero
     document.querySelectorAll('.solo-barbero').forEach(el => {
         el.style.setProperty('display', admin ? 'none' : 'inline-block', 'important');
     });
-    
     const filtrosP = document.getElementById('filtrosPendientes');
     const filtrosH = document.getElementById('filtrosHistorial');
     const filaSel = document.getElementById('filaSelectorBloqueo');
@@ -139,7 +142,7 @@ function actualizarUISegunRol() {
 async function loginUsuario() {
     const username = document.getElementById('usernameLogin').value.trim();
     const password = document.getElementById('passwordLogin').value;
-    if (!username || !password) { alert('Ingresa usuario y contraseña'); return; }
+    if (!username || !password) { mostrarToast('Ingresa usuario y contraseña', 'error'); return; }
     const msg = document.getElementById('mensajeLogin');
     msg.className = 'mensaje info';
     msg.textContent = 'Verificando...';
@@ -234,24 +237,21 @@ function cambiarTabBarbero(tab) {
     document.querySelectorAll('#tabsBarbero button').forEach(b => b.classList.remove('activo'));
     document.querySelectorAll('#barberoContenido .panel-tab').forEach(p => p.style.display = 'none');
     const b = document.querySelectorAll('#tabsBarbero button');
-    
-    // Detectar el índice de cada botón por su texto (más robusto)
     const tabsNombres = Array.from(b).map(btn => btn.textContent.trim());
-    const idxPendientes = tabsNombres.indexOf('Pendientes');
-    const idxHistorial = tabsNombres.indexOf('Historial');
-    const idxBarberos = tabsNombres.indexOf('Barberos');
-    const idxServicios = tabsNombres.indexOf('Servicios');
-    const idxCatalogo = tabsNombres.indexOf('Catalogo');
-    const idxEstadisticas = tabsNombres.indexOf('Estadisticas');
-    const idxMisEstadisticas = tabsNombres.indexOf('Mis Estadisticas');
-    const idxConfig = tabsNombres.indexOf('Configuracion');
-    
+    const idxPendientes = tabsNombres.findIndex(n => n.includes('Pendientes'));
+    const idxHistorial = tabsNombres.findIndex(n => n.includes('Historial'));
+    const idxBarberos = tabsNombres.findIndex(n => n.includes('Barberos'));
+    const idxServicios = tabsNombres.findIndex(n => n.includes('Servicios'));
+    const idxCatalogo = tabsNombres.findIndex(n => n.includes('Catalogo'));
+    const idxEstadisticas = tabsNombres.findIndex(n => n === 'Estadisticas');
+    const idxMisEstadisticas = tabsNombres.findIndex(n => n.includes('Mis Estadisticas'));
+    const idxConfig = tabsNombres.findIndex(n => n.includes('Configuracion'));
     const activar = (idx) => { if (idx >= 0 && b[idx]) b[idx].classList.add('activo'); };
-    
+
     if (tab === 'pendientes') { activar(idxPendientes); document.getElementById('tabPendientes').style.display = 'block'; cargarPendientes(); }
     else if (tab === 'historial') { activar(idxHistorial); document.getElementById('tabHistorial').style.display = 'block'; cargarHistorial(); }
     else if (tab === 'barberos') {
-        if (!esAdmin()) { alert('Solo admin'); return; }
+        if (!esAdmin()) { mostrarToast('Solo admin', 'error'); return; }
         activar(idxBarberos); document.getElementById('tabBarberos').style.display = 'block';
         cargarBarberos(); cargarBarberosSelectorAdmin();
     }
@@ -260,12 +260,12 @@ function cambiarTabBarbero(tab) {
         cargarServiciosSelectorAdmin(); cargarServiciosAdmin();
     }
     else if (tab === 'catalogo') {
-        if (!esAdmin()) { alert('Solo admin'); return; }
+        if (!esAdmin()) { mostrarToast('Solo admin', 'error'); return; }
         activar(idxCatalogo); document.getElementById('tabCatalogo').style.display = 'block';
         cargarCatalogoAdmin();
     }
     else if (tab === 'estadisticas') {
-        if (!esAdmin()) { alert('Solo admin'); return; }
+        if (!esAdmin()) { mostrarToast('Solo admin', 'error'); return; }
         activar(idxEstadisticas); document.getElementById('tabEstadisticas').style.display = 'block';
         cargarEstadisticas();
     }
@@ -324,8 +324,8 @@ async function cargarHuecos() {
     const fecha = document.getElementById('fecha').value;
     const barberoId = document.getElementById('barbero').value || 0;
     const servicioId = document.getElementById('servicio').value || 0;
-    if (!fecha) { alert('Selecciona fecha'); return; }
-    if (!servicioId) { alert('Selecciona un servicio'); return; }
+    if (!fecha) { mostrarToast('Selecciona fecha', 'error'); return; }
+    if (!servicioId) { mostrarToast('Selecciona un servicio', 'error'); return; }
     const c = document.getElementById('huecos');
     c.innerHTML = '<div class="sin-huecos">Cargando...</div>';
     try {
@@ -361,9 +361,9 @@ async function reservar() {
     const nombre = document.getElementById('nombre').value.trim();
     const telefono = document.getElementById('telefono').value.trim();
     const notas = document.getElementById('notas').value.trim();
-    if (!nombre) { alert('Nombre obligatorio'); return; }
-    if (!horaSeleccionada) { alert('Selecciona hora'); return; }
-    if (!servicio) { alert('Selecciona servicio'); return; }
+    if (!nombre) { mostrarToast('Nombre obligatorio', 'error'); return; }
+    if (!horaSeleccionada) { mostrarToast('Selecciona hora', 'error'); return; }
+    if (!servicio) { mostrarToast('Selecciona servicio', 'error'); return; }
     const msg = document.getElementById('mensajeReserva');
     msg.className = 'mensaje info';
     msg.textContent = 'Procesando...';
@@ -410,39 +410,36 @@ async function consultarCitas() {
             const div = document.createElement('div');
             div.className = 'cita-item';
             
-            // Estilos según estado
             let estadoClase = 'estado-pendiente';
             let estadoTexto = 'Pendiente';
             let estiloExtra = '';
             
             if (ct.estado === 'confirmada') {
                 estadoClase = 'estado-confirmada';
-                estadoTexto = '✓ Confirmada';
+                estadoTexto = 'Confirmada';
             } else if (ct.estado === 'pendiente_confirmacion') {
                 estadoClase = 'estado-pendiente';
-                estadoTexto = '⏳ Pendiente';
+                estadoTexto = 'Pendiente';
             } else if (ct.estado === 'cancelada_por_barbero') {
                 estadoClase = 'estado-expirada';
-                estadoTexto = '❌ Cancelada por el barbero';
+                estadoTexto = 'Cancelada por el barbero';
                 estiloExtra = 'border-left-color: #d97a7a;';
             }
             
-            // Si es cancelada, mostrar aviso grande
             let avisoCancelada = '';
             if (ct.estado === 'cancelada_por_barbero') {
                 avisoCancelada = `
                     <div style="background: rgba(139, 42, 42, 0.2); padding: 10px; border-radius: 6px; margin-bottom: 10px; color: #d97a7a;">
-                        ⚠️ Esta cita fue cancelada. Por favor, agenda una nueva.
+                        <i class="fa-solid fa-triangle-exclamation"></i> Esta cita fue cancelada. Por favor, agenda una nueva.
                     </div>
                 `;
             }
             
-            // Botones (solo si no está cancelada)
             let botones = '';
             if (ct.estado === 'confirmada' || ct.estado === 'pendiente_confirmacion') {
                 botones = `
-                    <button class="btn-cancelar" onclick="cancelarCita(${ct.id})">Cancelar</button>
-                    <button class="btn-modificar" onclick="solicitarModificacion(${ct.id})">Modificar</button>
+                    <button class="btn-cancelar" onclick="cancelarCita(${ct.id})"><i class="fa-solid fa-xmark"></i> Cancelar</button>
+                    <button class="btn-modificar" onclick="solicitarModificacion(${ct.id})"><i class="fa-solid fa-pen"></i> Modificar</button>
                 `;
             }
             
@@ -463,7 +460,7 @@ async function consultarCitas() {
 }
 
 async function cancelarCita(id) {
-    if (!confirm('¿Cancelar cita?')) return;
+    if (!await mostrarConfirmacion('¿Cancelar cita?')) return;
     try {
         const res = await fetch(`${API_URL}/api/cancelar-cita`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -472,7 +469,7 @@ async function cancelarCita(id) {
         const data = await res.json();
         mostrarToast(data.mensaje || data.error, res.ok ? 'exito' : 'error');
         if (res.ok) consultarCitas();
-    } catch (e) { alert('Error.'); }
+    } catch (e) { mostrarToast('Error al conectar', 'error'); }
 }
 
 async function solicitarModificacion(id) {
@@ -486,7 +483,7 @@ async function solicitarModificacion(id) {
         const data = await res.json();
         mostrarToast(data.mensaje || data.error, res.ok ? 'exito' : 'error');
         if (res.ok) consultarCitas();
-    } catch (e) { alert('Error.'); }
+    } catch (e) { mostrarToast('Error al conectar', 'error'); }
 }
 
 // ===== PENDIENTES =====
@@ -510,7 +507,7 @@ async function cargarPendientes() {
             const div = document.createElement('div');
             div.className = 'cita-item';
             let botonElim = '';
-            if (esAdmin()) botonElim = `<button class="btn-danger" style="background:#5a1a1a;" onclick="eliminarCitaPermanente(${ct.id})">🗑️ Eliminar</button>`;
+            if (esAdmin()) botonElim = `<button class="btn-danger" style="background:#5a1a1a;" onclick="eliminarCitaPermanente(${ct.id})"><i class="fa-solid fa-trash"></i> Eliminar</button>`;
             div.innerHTML = `
                 <div class="info">
                     <div class="fecha-hora">${escaparHTML(ct.fecha)} - ${escaparHTML(ct.hora_inicio)}</div>
@@ -520,8 +517,8 @@ async function cargarPendientes() {
                 </div>
                 <div><span class="estado estado-pendiente">Pendiente</span></div>
                 <div class="acciones">
-                    <button class="btn-confirmar" onclick="confirmarCita(${ct.id})">Aceptar</button>
-                    <button class="btn-rechazar" onclick="rechazarCita(${ct.id})">Rechazar</button>
+                    <button class="btn-confirmar" onclick="confirmarCita(${ct.id})"><i class="fa-solid fa-check"></i> Aceptar</button>
+                    <button class="btn-rechazar" onclick="rechazarCita(${ct.id})"><i class="fa-solid fa-xmark"></i> Rechazar</button>
                     ${botonElim}
                 </div>
             `;
@@ -531,16 +528,16 @@ async function cargarPendientes() {
 }
 
 async function confirmarCita(id) {
-    if (!confirm('¿Confirmar?')) return;
+    if (!await mostrarConfirmacion('¿Confirmar cita?')) return;
     try {
         const res = await fetch(`${API_URL}/api/panel/confirmar-cita`, {
             method: 'POST', headers: getAuthHeaders(),
             body: JSON.stringify({ cita_id: id })
         });
         const d = await res.json();
-        alert(d.mensaje || d.error);
+        mostrarToast(d.mensaje || d.error, res.ok ? 'exito' : 'error');
         cargarPendientes();
-    } catch (e) { alert('Error.'); }
+    } catch (e) { mostrarToast('Error al conectar', 'error'); }
 }
 
 async function rechazarCita(id) {
@@ -552,8 +549,7 @@ async function rechazarCita(id) {
         });
         const d = await res.json();
         if (res.ok) {
-            mostrarToast('✅ Cita rechazada', 'exito');
-            // Ofrecer avisar por WhatsApp
+            mostrarToast('Cita rechazada', 'exito');
             if (d.cliente_telefono) {
                 setTimeout(() => {
                     if (confirm(`¿Avisar a ${d.cliente} por WhatsApp que su cita fue rechazada?`)) {
@@ -599,8 +595,8 @@ async function cargarHistorial() {
             div.className = 'cita-item';
             const e = estados[ct.estado] || { clase: 'estado-pendiente', texto: ct.estado };
             let botones = '';
-            if (ct.estado === 'confirmada') botones += `<button class="btn-danger" onclick="cancelarCitaConfirmada(${ct.id})">Cancelar</button>`;
-            if (esAdmin()) botones += `<button class="btn-danger" style="background:#5a1a1a;" onclick="eliminarCitaPermanente(${ct.id})">🗑️ Eliminar</button>`;
+            if (ct.estado === 'confirmada') botones += `<button class="btn-danger" onclick="cancelarCitaConfirmada(${ct.id})"><i class="fa-solid fa-xmark"></i> Cancelar</button>`;
+            if (esAdmin()) botones += `<button class="btn-danger" style="background:#5a1a1a;" onclick="eliminarCitaPermanente(${ct.id})"><i class="fa-solid fa-trash"></i> Eliminar</button>`;
             div.innerHTML = `
                 <div class="info">
                     <div class="fecha-hora">${escaparHTML(ct.fecha)} - ${escaparHTML(ct.hora_inicio)}</div>
@@ -624,8 +620,7 @@ async function cancelarCitaConfirmada(id) {
         });
         const d = await res.json();
         if (res.ok) {
-            mostrarToast('✅ Cita cancelada', 'exito');
-            // Ofrecer avisar por WhatsApp
+            mostrarToast('Cita cancelada', 'exito');
             if (d.cliente_telefono) {
                 setTimeout(() => {
                     if (confirm(`¿Avisar a ${d.cliente} por WhatsApp que su cita fue cancelada?`)) {
@@ -636,21 +631,21 @@ async function cancelarCitaConfirmada(id) {
         } else {
             mostrarToast(d.error || 'Error', 'error');
         }
-        if (res.ok) cargarHistorial();
+        cargarHistorial();
     } catch (e) { mostrarToast('Error al conectar', 'error'); }
 }
 
 async function eliminarCitaPermanente(id) {
-    if (!confirm('⚠️ ¿ELIMINAR PERMANENTEMENTE?')) return;
-    if (!confirm('¿Estás seguro?')) return;
+    if (!await mostrarConfirmacion('¿ELIMINAR esta cita PERMANENTEMENTE?\n\nEsta acción NO se puede deshacer.', 'Eliminar cita')) return;
+    if (!await mostrarConfirmacion('¿Estás COMPLETAMENTE seguro?')) return;
     try {
         const res = await fetch(`${API_URL}/api/admin/citas/${id}`, {
             method: 'DELETE', headers: getAuthHeaders()
         });
         const d = await res.json();
-        alert(d.mensaje || d.error);
+        mostrarToast(d.mensaje || d.error, res.ok ? 'exito' : 'error');
         if (res.ok) { cargarHistorial(); cargarPendientes(); }
-    } catch (e) { alert('Error.'); }
+    } catch (e) { mostrarToast('Error al conectar', 'error'); }
 }
 
 // ===== BARBEROS (ADMIN) =====
@@ -725,18 +720,16 @@ async function cargarBarberos() {
             let botones = '';
             if (esAdmin()) {
                 if (b.activo) {
-                    // Barbero activo: editar, desactivar, eliminar
                     botones = `
-                        <button class="btn-modificar" onclick="editarBarbero(${b.id})">Editar</button>
-                        <button class="btn-danger" onclick="desactivarBarbero(${b.id})">Desactivar</button>
-                        <button class="btn-danger" style="background:#5a1a1a;" onclick="eliminarBarberoPermanente(${b.id})">🗑️</button>
+                        <button class="btn-modificar" onclick="editarBarbero(${b.id})"><i class="fa-solid fa-pen"></i> Editar</button>
+                        <button class="btn-danger" onclick="desactivarBarbero(${b.id})"><i class="fa-solid fa-ban"></i> Desactivar</button>
+                        <button class="btn-danger" style="background:#5a1a1a;" onclick="eliminarBarberoPermanente(${b.id})"><i class="fa-solid fa-trash"></i></button>
                     `;
                 } else {
-                    // Barbero inactivo: reactivar, editar, eliminar
                     botones = `
-                        <button class="btn-success" onclick="reactivarBarbero(${b.id})">✅ Reactivar</button>
-                        <button class="btn-modificar" onclick="editarBarbero(${b.id})">Editar</button>
-                        <button class="btn-danger" style="background:#5a1a1a;" onclick="eliminarBarberoPermanente(${b.id})">🗑️</button>
+                        <button class="btn-success" onclick="reactivarBarbero(${b.id})"><i class="fa-solid fa-check"></i> Reactivar</button>
+                        <button class="btn-modificar" onclick="editarBarbero(${b.id})"><i class="fa-solid fa-pen"></i> Editar</button>
+                        <button class="btn-danger" style="background:#5a1a1a;" onclick="eliminarBarberoPermanente(${b.id})"><i class="fa-solid fa-trash"></i></button>
                     `;
                 }
             }
@@ -786,28 +779,45 @@ async function editarBarbero(id) {
 }
 
 async function desactivarBarbero(id) {
-    if (!confirm('¿Desactivar? Se cancelarán sus citas futuras.')) return;
+    if (!await mostrarConfirmacion('¿Desactivar? Se cancelarán sus citas futuras.')) return;
     try {
         const res = await fetch(`${API_URL}/api/admin/barberos/${id}`, {
             method: 'DELETE', headers: getAuthHeaders()
         });
         const d = await res.json();
-        alert(d.mensaje || d.error);
+        mostrarToast(d.mensaje || d.error, res.ok ? 'exito' : 'error');
         if (res.ok) { cargarBarberos(); cargarBarberosSelectorAdmin(); cargarBarberosCliente(); }
-    } catch (e) { alert('Error.'); }
+    } catch (e) { mostrarToast('Error al conectar', 'error'); }
 }
 
 async function eliminarBarberoPermanente(id) {
-    if (!confirm('⚠️ ¿ELIMINAR PERMANENTEMENTE?\nSe borrarán sus datos y usuario.')) return;
-    if (!confirm('¿Estás seguro?')) return;
+    if (!await mostrarConfirmacion('¿ELIMINAR este barbero PERMANENTEMENTE?\n\nSe borrarán TODOS sus datos y su usuario.', 'Eliminar barbero')) return;
+    if (!await mostrarConfirmacion('¿Estás COMPLETAMENTE seguro?')) return;
     try {
         const res = await fetch(`${API_URL}/api/admin/barberos/${id}/permanente`, {
             method: 'DELETE', headers: getAuthHeaders()
         });
         const d = await res.json();
-        alert(d.mensaje || d.error);
+        mostrarToast(d.mensaje || d.error, res.ok ? 'exito' : 'error');
         if (res.ok) { cargarBarberos(); cargarBarberosSelectorAdmin(); cargarBarberosCliente(); }
-    } catch (e) { alert('Error.'); }
+    } catch (e) { mostrarToast('Error al conectar', 'error'); }
+}
+
+async function reactivarBarbero(id) {
+    if (!await mostrarConfirmacion('¿Reactivar este barbero?')) return;
+    try {
+        const res = await fetch(`${API_URL}/api/admin/barberos/${id}/reactivar`, {
+            method: 'PUT',
+            headers: getAuthHeaders()
+        });
+        const d = await res.json();
+        mostrarToast(d.mensaje || d.error, res.ok ? 'exito' : 'error');
+        if (res.ok) {
+            cargarBarberos();
+            cargarBarberosSelectorAdmin();
+            cargarBarberosCliente();
+        }
+    } catch (e) { mostrarToast('Error al conectar', 'error'); }
 }
 
 async function cargarBarberosSelectorAdmin() {
@@ -847,7 +857,6 @@ async function cargarServiciosSelectorAdmin() {
     const sel = document.getElementById('serviciosBarberoSelect');
     if (!sel) return;
     try {
-        // Si es admin, mostrar todos los barberos
         if (esAdmin()) {
             const res = await fetch(`${API_URL}/api/admin/barberos`, { headers: getAuthHeaders() });
             const bs = (await res.json()).filter(b => b.activo);
@@ -860,7 +869,6 @@ async function cargarServiciosSelectorAdmin() {
             });
             if (val) sel.value = val;
         } else {
-            // Si es barbero, solo su propio nombre
             const o = document.createElement('option');
             o.value = currentUser.barbero_id;
             o.textContent = 'Mis servicios';
@@ -895,9 +903,9 @@ async function cargarServiciosAdmin() {
                     ${s.descripcion ? `<div class="cliente">${escaparHTML(s.descripcion)}</div>` : ''}
                 </div>
                 <div class="acciones">
-                    <button class="btn-modificar" onclick="editarServicio(${s.id})">Editar</button>
+                    <button class="btn-modificar" onclick="editarServicio(${s.id})"><i class="fa-solid fa-pen"></i> Editar</button>
                     <button class="btn-secundario" onclick="toggleServicioActivo(${s.id}, ${s.activo})">${s.activo ? 'Desactivar' : 'Activar'}</button>
-                    <button class="btn-danger" onclick="eliminarServicio(${s.id})">🗑️</button>
+                    <button class="btn-danger" onclick="eliminarServicio(${s.id})"><i class="fa-solid fa-trash"></i></button>
                 </div>
             `;
             c.appendChild(div);
@@ -922,9 +930,9 @@ async function guardarServicio() {
     const nombre = document.getElementById('servicioNombre').value.trim();
     const duracion = parseInt(document.getElementById('servicioDuracion').value);
     const precio = parseFloat(document.getElementById('servicioPrecio').value);
-    if (!nombre) { alert('El nombre es obligatorio'); return; }
-    if (!duracion || duracion <= 0) { alert('Duración inválida'); return; }
-    if (isNaN(precio) || precio < 0) { alert('Precio inválido'); return; }
+    if (!nombre) { mostrarToast('El nombre es obligatorio', 'error'); return; }
+    if (!duracion || duracion <= 0) { mostrarToast('Duración inválida', 'error'); return; }
+    if (isNaN(precio) || precio < 0) { mostrarToast('Precio inválido', 'error'); return; }
     const selBarbero = document.getElementById('serviciosBarberoSelect');
     const barberoId = selBarbero?.value || currentUser?.barbero_id;
     const body = {
@@ -946,7 +954,7 @@ async function guardarServicio() {
         if (res.ok) {
             setTimeout(() => { cerrarFormServicio(); cargarServiciosAdmin(); }, 1000);
         }
-    } catch (e) { alert('Error.'); }
+    } catch (e) { mostrarToast('Error al conectar', 'error'); }
 }
 
 async function editarServicio(id) {
@@ -964,7 +972,7 @@ async function editarServicio(id) {
         document.getElementById('servicioDescripcion').value = s.descripcion || '';
         document.getElementById('formServicio').style.display = 'block';
         document.getElementById('formServicio').scrollIntoView({ behavior: 'smooth' });
-    } catch (e) { alert('Error.'); }
+    } catch (e) { mostrarToast('Error al cargar', 'error'); }
 }
 
 async function toggleServicioActivo(id, activo) {
@@ -978,15 +986,15 @@ async function toggleServicioActivo(id, activo) {
 }
 
 async function eliminarServicio(id) {
-    if (!confirm('¿Eliminar este servicio? Si tiene citas, solo se desactivará.')) return;
+    if (!await mostrarConfirmacion('¿Eliminar este servicio? Si tiene citas, solo se desactivará.')) return;
     try {
         const res = await fetch(`${API_URL}/api/admin/servicios/${id}`, {
             method: 'DELETE', headers: getAuthHeaders()
         });
         const d = await res.json();
-        alert(d.mensaje || d.error);
+        mostrarToast(d.mensaje || d.error, res.ok ? 'exito' : 'error');
         if (res.ok) cargarServiciosAdmin();
-    } catch (e) { alert('Error.'); }
+    } catch (e) { mostrarToast('Error al conectar', 'error'); }
 }
 
 // ===== CATALOGO (ADMIN) =====
@@ -1013,9 +1021,9 @@ async function cargarCatalogoAdmin() {
                             ${i.descripcion ? `<div class="cliente">${escaparHTML(i.descripcion)}</div>` : ''}
                         </div>
                         <div class="acciones">
-                            <button class="btn-modificar" onclick="editarItem(${i.id})">Editar</button>
+                            <button class="btn-modificar" onclick="editarItem(${i.id})"><i class="fa-solid fa-pen"></i> Editar</button>
                             <button class="btn-secundario" onclick="toggleItemActivo(${i.id}, ${i.activo})">${i.activo ? 'Desactivar' : 'Activar'}</button>
-                            <button class="btn-danger" onclick="eliminarItem(${i.id})">🗑️</button>
+                            <button class="btn-danger" onclick="eliminarItem(${i.id})"><i class="fa-solid fa-trash"></i></button>
                         </div>
                     </div>
                 `).join('');
@@ -1048,7 +1056,7 @@ async function guardarItem() {
         descripcion: document.getElementById('itemDescripcion').value.trim(),
         orden: parseInt(document.getElementById('itemOrden').value) || 0
     };
-    if (!body.archivo || !body.nombre) { alert('Archivo y nombre obligatorios'); return; }
+    if (!body.archivo || !body.nombre) { mostrarToast('Archivo y nombre obligatorios', 'error'); return; }
     const url = id ? `${API_URL}/api/admin/catalogo/${id}` : `${API_URL}/api/admin/catalogo`;
     const method = id ? 'PUT' : 'POST';
     try {
@@ -1059,7 +1067,7 @@ async function guardarItem() {
         msg.textContent = d.mensaje || d.error;
         msg.style.display = 'block';
         if (res.ok) setTimeout(() => { cerrarFormItem(); cargarCatalogoAdmin(); }, 1000);
-    } catch (e) { alert('Error.'); }
+    } catch (e) { mostrarToast('Error al conectar', 'error'); }
 }
 
 async function editarItem(id) {
@@ -1077,7 +1085,7 @@ async function editarItem(id) {
         document.getElementById('itemOrden').value = it.orden || 0;
         document.getElementById('formItem').style.display = 'block';
         document.getElementById('formItem').scrollIntoView({ behavior: 'smooth' });
-    } catch (e) { alert('Error.'); }
+    } catch (e) { mostrarToast('Error al cargar', 'error'); }
 }
 
 async function toggleItemActivo(id, activo) {
@@ -1091,15 +1099,15 @@ async function toggleItemActivo(id, activo) {
 }
 
 async function eliminarItem(id) {
-    if (!confirm('¿Eliminar item? (La imagen sigue en el repo)')) return;
+    if (!await mostrarConfirmacion('¿Eliminar item del catálogo? (La imagen sigue en el repositorio)')) return;
     try {
         const res = await fetch(`${API_URL}/api/admin/catalogo/${id}`, {
             method: 'DELETE', headers: getAuthHeaders()
         });
         const d = await res.json();
-        alert(d.mensaje || d.error);
+        mostrarToast(d.mensaje || d.error, res.ok ? 'exito' : 'error');
         if (res.ok) cargarCatalogoAdmin();
-    } catch (e) { alert('Error.'); }
+    } catch (e) { mostrarToast('Error al conectar', 'error'); }
 }
 
 // ===== BLOQUEAR DIAS =====
@@ -1108,8 +1116,8 @@ async function bloquearDias() {
     const fin = document.getElementById('bloqueoFin').value;
     const mot = document.getElementById('bloqueoMotivo').value.trim() || 'Descanso';
     const bid = parseInt(document.getElementById('bloqueoBarbero')?.value) || 1;
-    if (!ini || !fin) { alert('Fechas'); return; }
-    if (fin < ini) { alert('Fecha fin inválida'); return; }
+    if (!ini || !fin) { mostrarToast('Fechas requeridas', 'error'); return; }
+    if (fin < ini) { mostrarToast('Fecha fin inválida', 'error'); return; }
     const msg = document.getElementById('mensajeBloqueo');
     msg.className = 'mensaje info';
     msg.textContent = 'Procesando...';
@@ -1121,7 +1129,7 @@ async function bloquearDias() {
         });
         const d = await res.json();
         if (res.status === 409) {
-            if (confirm(`Hay ${d.citas_afectadas.length} citas. ¿Cancelar?`)) {
+            if (await mostrarConfirmacion(`Hay ${d.citas_afectadas.length} citas. ¿Cancelar?`)) {
                 const ids = d.citas_afectadas.map(c => c.id);
                 const r2 = await fetch(`${API_URL}/api/panel/cancelar-citas-masivo`, {
                     method: 'POST', headers: getAuthHeaders(),
@@ -1143,137 +1151,6 @@ async function bloquearDias() {
         msg.textContent = 'Error al conectar.';
     }
 }
-
-// Helper: obtener fecha en zona horaria de Venezuela (UTC-4)
-function fechaVE(diasAdelante = 0) {
-    // Crear fecha actual en UTC
-    const ahora = new Date();
-    // Convertir a hora Venezuela (UTC-4)
-    const ahoraVE = new Date(ahora.getTime() - (4 * 60 * 60 * 1000));
-    // Sumar días
-    ahoraVE.setUTCDate(ahoraVE.getUTCDate() + diasAdelante);
-    // Devolver en formato YYYY-MM-DD
-    return ahoraVE.toISOString().split('T')[0];
-}
-
-// ===== INICIALIZACIÓN =====
-document.addEventListener('DOMContentLoaded', function() {
-    cargarModo();
-    cargarSesion();
-    actualizarUISegunRol();
-    try {
-        const fechaManana = fechaVE(1);  // Mañana
-        const fechaHoy = fechaVE(0);      // Hoy
-
-        const iF = document.getElementById('fecha');
-        if (iF) { iF.value = fechaManana; iF.min = fechaHoy; }
-
-        const iI = document.getElementById('bloqueoInicio');
-        const iFn = document.getElementById('bloqueoFin');
-        if (iI) { iI.value = fechaHoy; iI.min = fechaHoy; }
-        if (iFn) { iFn.value = fechaHoy; iFn.min = fechaHoy; }
-    } catch (e) {}
-    cargarBarberosCliente();
-});
-
-// TOASTS
-function mostrarToast(mensaje, tipo = 'info', duracion = 3500) {
-    const cont = document.getElementById('toast-container');
-    if (!cont) return;
-    const toast = document.createElement('div');
-    toast.className = `toast ${tipo}`;
-    toast.textContent = mensaje;
-    cont.appendChild(toast);
-    setTimeout(() => {
-        toast.style.animation = 'slideOut 0.3s ease';
-        setTimeout(() => toast.remove(), 300);
-    }, duracion);
-}
-
-// MODAL
-let modalResolve = null;
-function mostrarConfirmacion(mensaje, titulo = 'Confirmar') {
-    return new Promise(resolve => {
-        modalResolve = resolve;
-        document.getElementById('modal-titulo').textContent = titulo;
-        document.getElementById('modal-mensaje').textContent = mensaje;
-        document.getElementById('modal-overlay').classList.add('activo');
-    });
-}
-function cerrarModal(resultado) {
-    document.getElementById('modal-overlay').classList.remove('activo');
-    if (modalResolve) { modalResolve(resultado); modalResolve = null; }
-}
-
-function toggleModo() {
-    document.body.classList.toggle('modo-claro');
-    const modo = document.body.classList.contains('modo-claro') ? 'claro' : 'oscuro';
-    try { localStorage.setItem('modo', modo); } catch (e) {}
-    mostrarToast(`Modo ${modo}`, 'info');
-}
-function cargarModo() {
-    try {
-        if (localStorage.getItem('modo') === 'claro') document.body.classList.add('modo-claro');
-    } catch (e) {}
-}
-
-function toggleCamposPausa() {
-    const val = document.getElementById('barberoConPausa').value;
-    document.getElementById('campoPausaInicio').style.display = val === 'si' ? 'block' : 'none';
-    document.getElementById('campoPausaFin').style.display = val === 'si' ? 'block' : 'none';
-}
-
-async function reactivarBarbero(id) {
-    if (!confirm('¿Reactivar este barbero?')) return;
-    try {
-        const res = await fetch(`${API_URL}/api/admin/barberos/${id}/reactivar`, {
-            method: 'PUT',
-            headers: getAuthHeaders()
-        });
-        const d = await res.json();
-        alert(d.mensaje || d.error);
-        if (res.ok) {
-            cargarBarberos();
-            cargarBarberosSelectorAdmin();
-            cargarBarberosCliente();
-        }
-    } catch (e) { alert('Error.'); }
-}
-
-// ===== AVISAR POR WHATSAPP =====
-function avisarPorWhatsApp(nombre, telefono, fecha, hora, accion) {
-    // Limpiar el teléfono: solo dígitos
-    let numero = String(telefono || '').replace(/\D/g, '');
-    if (!numero) {
-        mostrarToast('El cliente no tiene teléfono registrado', 'error');
-        return;
-    }
-    // Si empieza con 0, asumir Venezuela (+58)
-    if (numero.startsWith('0')) {
-        numero = '58' + numero.substring(1);
-    }
-    // Si no empieza con 58, asumir Venezuela
-    if (!numero.startsWith('58')) {
-        numero = '58' + numero;
-    }
-    
-    // Construir el mensaje
-    let mensaje = '';
-    if (accion === 'rechazada') {
-        mensaje = `Hola ${nombre}, tu solicitud de cita para el ${fecha} a las ${hora} NO pudo ser aceptada. Por favor, contáctanos para agendar en otro horario. - Gocho Barber`;
-    } else if (accion === 'cancelada') {
-        mensaje = `Hola ${nombre}, tu cita del ${fecha} a las ${hora} ha sido cancelada. Disculpa las molestias. Por favor, contáctanos para reagendar. - Gocho Barber`;
-    } else {
-        mensaje = `Hola ${nombre}, te escribimos de Gocho Barber por tu cita del ${fecha} a las ${hora}.`;
-    }
-    
-    // Codificar el mensaje para URL
-    const mensajeCod = encodeURIComponent(mensaje);
-    
-    // Abrir WhatsApp Web en nueva pestaña
-    window.open(`https://wa.me/${numero}?text=${mensajeCod}`, '_blank');
-}
-
 
 // ===== ESTADÍSTICAS =====
 let charts = {};
@@ -1299,7 +1176,7 @@ async function cargarEstadisticas() {
         dibujarGraficoBarras('graficoCitas', data.citas_mes.etiquetas, data.citas_mes.valores, 'Citas');
         dibujarGraficoLineas('graficoIngresos', data.ingresos_mes.etiquetas, data.ingresos_mes.valores);
         dibujarGraficoDona('graficoBarberos', data.barberos.nombres, data.barberos.cantidades);
-        dibujarTopClientes(data.clientes_top);
+        dibujarTopClientes(data.clientes_top, 'topClientes');
     } catch (e) {
         console.error('Error cargando estadísticas:', e);
         mostrarToast('Error al cargar estadísticas', 'error');
@@ -1354,17 +1231,10 @@ function dibujarGraficoBarras(id, etiquetas, valores, label) {
         options: {
             responsive: true,
             maintainAspectRatio: true,
-            plugins: {
-                legend: { display: false }
-            },
+            plugins: { legend: { display: false } },
             scales: {
-                y: {
-                    beginAtZero: true,
-                    ticks: { color: '#8a7a6a', stepSize: 1 }
-                },
-                x: {
-                    ticks: { color: '#8a7a6a' }
-                }
+                y: { beginAtZero: true, ticks: { color: '#8a7a6a', stepSize: 1 } },
+                x: { ticks: { color: '#8a7a6a' } }
             }
         }
     });
@@ -1392,22 +1262,16 @@ function dibujarGraficoLineas(id, etiquetas, valores) {
         options: {
             responsive: true,
             maintainAspectRatio: true,
-            plugins: {
-                legend: { display: false }
-            },
+            plugins: { legend: { display: false } },
             scales: {
                 y: {
                     beginAtZero: true,
-                    ticks: { 
+                    ticks: {
                         color: '#8a7a6a',
-                        callback: function(value) {
-                            return '$' + Number(value).toLocaleString('es-CO');
-                        }
+                        callback: function(value) { return '$' + Number(value).toLocaleString('es-CO'); }
                     }
                 },
-                x: {
-                    ticks: { color: '#8a7a6a' }
-                }
+                x: { ticks: { color: '#8a7a6a' } }
             }
         }
     });
@@ -1417,7 +1281,6 @@ function dibujarGraficoDona(id, nombres, cantidades) {
     const ctx = document.getElementById(id);
     if (!ctx) return;
     if (charts[id]) charts[id].destroy();
-    
     const colores = [
         'rgba(201, 168, 76, 0.8)',
         'rgba(212, 184, 120, 0.8)',
@@ -1425,7 +1288,6 @@ function dibujarGraficoDona(id, nombres, cantidades) {
         'rgba(240, 213, 168, 0.8)',
         'rgba(106, 74, 42, 0.8)'
     ];
-    
     charts[id] = new Chart(ctx, {
         type: 'doughnut',
         data: {
@@ -1465,7 +1327,6 @@ function dibujarTopClientes(clientes, contenedorId = 'topClientes') {
     `).join('');
 }
 
-
 // ===== MODAL DE DETALLE =====
 async function verDetalle(tipo) {
     const modal = document.getElementById('modal-detalle');
@@ -1492,7 +1353,6 @@ async function verDetalle(tipo) {
         
         let html = '<table><thead><tr>';
         
-        // Encabezados según tipo
         if (tipo === 'citas_mes' || tipo === 'citas_totales') {
             html += '<th>Fecha</th><th>Hora</th><th>Cliente</th><th>Servicio</th><th>Precio</th><th>Barbero</th>';
             html += '</tr></thead><tbody>';
@@ -1547,17 +1407,101 @@ function cerrarModalDetalle() {
     document.getElementById('modal-detalle').classList.remove('activo');
 }
 
-window.verDetalle = verDetalle;
-window.cerrarModalDetalle = cerrarModalDetalle;
-window.cargarMisEstadisticas = cargarMisEstadisticas;
-window.cargarEstadisticas = cargarEstadisticas;
-window.avisarPorWhatsApp = avisarPorWhatsApp;
-window.reactivarBarbero = reactivarBarbero;
-window.toggleCamposPausa = toggleCamposPausa;
-window.toggleModo = toggleModo;
-window.mostrarToast = mostrarToast;
-window.mostrarConfirmacion = mostrarConfirmacion;
-window.cerrarModal = cerrarModal;
+// ===== TOASTS =====
+function mostrarToast(mensaje, tipo = 'info', duracion = 3500) {
+    const cont = document.getElementById('toast-container');
+    if (!cont) return;
+    const toast = document.createElement('div');
+    toast.className = `toast ${tipo}`;
+    toast.textContent = mensaje;
+    cont.appendChild(toast);
+    setTimeout(() => {
+        toast.style.animation = 'slideOut 0.3s ease';
+        setTimeout(() => toast.remove(), 300);
+    }, duracion);
+}
+
+// ===== MODAL =====
+let modalResolve = null;
+function mostrarConfirmacion(mensaje, titulo = 'Confirmar') {
+    return new Promise(resolve => {
+        modalResolve = resolve;
+        document.getElementById('modal-titulo').textContent = titulo;
+        document.getElementById('modal-mensaje').textContent = mensaje;
+        document.getElementById('modal-overlay').classList.add('activo');
+    });
+}
+function cerrarModal(resultado) {
+    document.getElementById('modal-overlay').classList.remove('activo');
+    if (modalResolve) { modalResolve(resultado); modalResolve = null; }
+}
+
+// ===== MODO CLARO/OSCURO =====
+function toggleModo() {
+    document.body.classList.toggle('modo-claro');
+    const modo = document.body.classList.contains('modo-claro') ? 'claro' : 'oscuro';
+    try { localStorage.setItem('modo', modo); } catch (e) {}
+    mostrarToast(`Modo ${modo}`, 'info');
+}
+function cargarModo() {
+    try {
+        if (localStorage.getItem('modo') === 'claro') document.body.classList.add('modo-claro');
+    } catch (e) {}
+}
+
+// ===== PAUSA EN FORM BARBERO =====
+function toggleCamposPausa() {
+    const val = document.getElementById('barberoConPausa').value;
+    document.getElementById('campoPausaInicio').style.display = val === 'si' ? 'block' : 'none';
+    document.getElementById('campoPausaFin').style.display = val === 'si' ? 'block' : 'none';
+}
+
+// ===== AVISAR POR WHATSAPP =====
+function avisarPorWhatsApp(nombre, telefono, fecha, hora, accion) {
+    let numero = String(telefono || '').replace(/\D/g, '');
+    if (!numero) {
+        mostrarToast('El cliente no tiene teléfono registrado', 'error');
+        return;
+    }
+    if (numero.startsWith('0')) {
+        numero = '58' + numero.substring(1);
+    }
+    if (!numero.startsWith('58')) {
+        numero = '58' + numero;
+    }
+    
+    let mensaje = '';
+    if (accion === 'rechazada') {
+        mensaje = `Hola ${nombre}, tu solicitud de cita para el ${fecha} a las ${hora} NO pudo ser aceptada. Por favor, contáctanos para agendar en otro horario. - Gocho Barber`;
+    } else if (accion === 'cancelada') {
+        mensaje = `Hola ${nombre}, tu cita del ${fecha} a las ${hora} ha sido cancelada. Disculpa las molestias. Por favor, contáctanos para reagendar. - Gocho Barber`;
+    } else {
+        mensaje = `Hola ${nombre}, te escribimos de Gocho Barber por tu cita del ${fecha} a las ${hora}.`;
+    }
+    
+    const mensajeCod = encodeURIComponent(mensaje);
+    window.open(`https://wa.me/${numero}?text=${mensajeCod}`, '_blank');
+}
+
+// ===== INICIALIZACIÓN =====
+document.addEventListener('DOMContentLoaded', function() {
+    cargarModo();
+    cargarSesion();
+    actualizarUISegunRol();
+    try {
+        const fechaManana = fechaVE(1);
+        const fechaHoy = fechaVE(0);
+        const iF = document.getElementById('fecha');
+        if (iF) { iF.value = fechaManana; iF.min = fechaHoy; }
+        const iI = document.getElementById('bloqueoInicio');
+        const iFn = document.getElementById('bloqueoFin');
+        if (iI) { iI.value = fechaHoy; iI.min = fechaHoy; }
+        if (iFn) { iFn.value = fechaHoy; iFn.min = fechaHoy; }
+    } catch (e) {}
+    cargarBarberosCliente();
+});
+
+// ===== EXPONER AL GLOBAL =====
 window.cambiarVista = cambiarVista;
 window.cambiarTabCliente = cambiarTabCliente;
 window.cambiarTabBarbero = cambiarTabBarbero;
@@ -1580,6 +1524,7 @@ window.guardarBarbero = guardarBarbero;
 window.editarBarbero = editarBarbero;
 window.desactivarBarbero = desactivarBarbero;
 window.eliminarBarberoPermanente = eliminarBarberoPermanente;
+window.reactivarBarbero = reactivarBarbero;
 window.abrirFormServicio = abrirFormServicio;
 window.cerrarFormServicio = cerrarFormServicio;
 window.guardarServicio = guardarServicio;
@@ -1595,3 +1540,12 @@ window.toggleItemActivo = toggleItemActivo;
 window.eliminarItem = eliminarItem;
 window.bloquearDias = bloquearDias;
 window.alCambiarBarbero = alCambiarBarbero;
+window.toggleCamposPausa = toggleCamposPausa;
+window.toggleModo = toggleModo;
+window.mostrarToast = mostrarToast;
+window.mostrarConfirmacion = mostrarConfirmacion;
+window.cerrarModal = cerrarModal;
+window.verDetalle = verDetalle;
+window.cerrarModalDetalle = cerrarModalDetalle;
+window.cargarMisEstadisticas = cargarMisEstadisticas;
+window.avisarPorWhatsApp = avisarPorWhatsApp;
