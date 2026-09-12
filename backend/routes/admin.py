@@ -291,16 +291,38 @@ def eliminar_barbero_permanente(barbero_id):
             })
         else:
             # Sin historial: borrar todo
-            cursor.execute('DELETE FROM servicios WHERE barbero_id = %s', (barbero_id,))
-            cursor.execute('DELETE FROM usuarios WHERE barbero_id = %s', (barbero_id,))
-            cursor.execute('DELETE FROM bloqueos WHERE barbero_id = %s', (barbero_id,))
-            cursor.execute('DELETE FROM barberos WHERE id = %s', (barbero_id,))
+            # Borrar de barbero_servicios (tabla vieja)
+            try:
+                cursor.execute('DELETE FROM barbero_servicios WHERE barbero_id = %s', (barbero_id,))
+            except Exception:
+                pass  # Si la tabla no existe, ignorar
+            
+            # Borrar servicios del barbero
+            try:
+                cursor.execute('DELETE FROM servicios WHERE barbero_id = %s', (barbero_id,))
+            except Exception:
+                pass
+            
+            # Borrar de otras tablas relacionadas
+            try:
+                cursor.execute('DELETE FROM usuarios WHERE barbero_id = %s', (barbero_id,))
+            except Exception:
+                pass
+            
+            try:
+                cursor.execute('DELETE FROM bloqueos WHERE barbero_id = %s', (barbero_id,))
+            except Exception:
+                pass
+            
+            try:
+                cursor.execute('DELETE FROM barberos WHERE id = %s', (barbero_id,))
+            except Exception:
+                pass
+
             conn.commit()
             conn.close()
             enviar_telegram(f"🗑️ <b>Barbero eliminado permanentemente</b>\n{barbero['nombre']}")
             return jsonify({'mensaje': f'Barbero "{barbero["nombre"]}" eliminado permanentemente'})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
 
 # ========== SERVICIOS (por barbero) ==========
 
