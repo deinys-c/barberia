@@ -620,7 +620,7 @@ def backup_db():
         cursor = conn.cursor()
         
         backup = {
-            'fecha_backup': datetime.now().isoformat(),
+            'fecha_backup': ahora_ve().isoformat(),
             'version': '1.0',
             'datos': {}
         }
@@ -645,7 +645,7 @@ def backup_db():
         import json as json_lib
         
         json_str = json_lib.dumps(backup, indent=2, default=str, ensure_ascii=False)
-        fecha = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+        fecha = ahora_ve().strftime('%Y-%m-%d_%H-%M-%S')
         
         # Si se pide como descarga, devolver archivo
         if request.args.get('descargar') == 'si':
@@ -680,7 +680,7 @@ def backup_telegram():
         cursor = conn.cursor()
         
         backup = {
-            'fecha_backup': datetime.now().isoformat(),
+            'fecha_backup': ahora_ve().isoformat(),
             'version': '1.0',
             'datos': {}
         }
@@ -703,13 +703,13 @@ def backup_telegram():
         
         # Convertir a JSON
         json_str = json_lib.dumps(backup, indent=2, default=str, ensure_ascii=False)
-        fecha = datetime.now().strftime('%Y-%m-%d_%H-%M')
+        fecha = ahora_ve().strftime('%Y-%m-%d_%H-%M')
         nombre_archivo = f'backup_barberia_{fecha}.json'
         
         # Enviar a Telegram
         caption = (
             f"📦 <b>Backup Gocho Barber</b>\n"
-            f"📅 {datetime.now().strftime('%d/%m/%Y %H:%M')}\n\n"
+            f"📅 {ahora_ve().strftime('%d/%m/%Y %H:%M')}\n\n"
             + "\n".join([f"• {k}: {v}" for k, v in totales.items()])
         )
         enviado = enviar_telegram_documento(nombre_archivo, json_str, caption)
