@@ -15,6 +15,7 @@
             <div class="slogan">ESTILO · TRADICION · EXCELENCIA</div>
         </div>
         <div class="header-actions">
+            <button onclick="toggleModo()" title="Cambiar modo">🌓 Modo</button>
             <button id="btnCliente" class="activo" onclick="cambiarVista('cliente')">Cliente</button>
             <button id="btnBarbero" onclick="cambiarVista('barbero')">Panel</button>
         </div>
@@ -152,6 +153,27 @@
                         <div><label>Hora inicio</label><input type="time" id="barberoHoraInicio" value="08:00"></div>
                         <div><label>Hora fin</label><input type="time" id="barberoHoraFin" value="17:00"></div>
                     </div>
+                    <div class="row">
+    <div><label>Hora inicio *</label><input type="time" id="barberoHoraInicio" value="08:00"></div>
+    <div><label>Hora fin *</label><input type="time" id="barberoHoraFin" value="17:00"></div>
+</div>
+<div class="row">
+    <div>
+        <label>¿Tiene pausa?</label>
+        <select id="barberoConPausa" onchange="toggleCamposPausa()">
+            <option value="no">No</option>
+            <option value="si">Sí (para comer, descansar)</option>
+        </select>
+    </div>
+    <div id="campoPausaInicio" style="display:none;">
+        <label>Pausa inicio</label>
+        <input type="time" id="barberoPausaInicio" value="12:00">
+    </div>
+    <div id="campoPausaFin" style="display:none;">
+        <label>Pausa fin</label>
+        <input type="time" id="barberoPausaFin" value="14:00">
+    </div>
+</div>
                     <div class="info-nota">
                         <strong>Nota:</strong> El usuario y contraseña se generan automáticamente.<br>
                         Ej: <code>Pepe</code> → usuario <code>pepe</code>, contraseña <code>pepe123</code>
@@ -265,6 +287,20 @@
     </div>
 </div>
 
+<!-- Toasts -->
+<div id="toast-container"></div>
+
+<!-- Modal -->
+<div id="modal-overlay" class="modal-overlay">
+    <div class="modal-box">
+        <h3 id="modal-titulo">Confirmar</h3>
+        <p id="modal-mensaje">¿Estás seguro?</p>
+        <div class="modal-botones">
+            <button class="btn btn-secundario" onclick="cerrarModal(false)">Cancelar</button>
+            <button class="btn" onclick="cerrarModal(true)">Aceptar</button>
+        </div>
+    </div>
+</div>
 <script src="script.js"></script>
 </body>
 </html>

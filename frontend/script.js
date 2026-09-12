@@ -261,6 +261,7 @@ async function cargarBarberosCliente() {
             o.value = b.id; o.textContent = b.nombre;
             sel.appendChild(o);
         });
+        await alCambiarBarbero();
     } catch (e) {}
 }
 
@@ -268,18 +269,13 @@ async function alCambiarBarbero() {
     const barberoId = parseInt(document.getElementById('barbero').value) || 0;
     const sel = document.getElementById('servicio');
     if (!sel) return;
-    if (barberoId === 0) {
-        // Mostrar mensaje y deshabilitar
-        sel.innerHTML = '<option value="">Selecciona un barbero específico</option>';
-        return;
-    }
     sel.innerHTML = '<option value="">Cargando...</option>';
     try {
         const res = await fetch(`${API_URL}/api/servicios?barbero_id=${barberoId}`);
         const servicios = await res.json();
         sel.innerHTML = '';
         if (!servicios.length) {
-            sel.innerHTML = '<option value="">Este barbero no tiene servicios</option>';
+            sel.innerHTML = '<option value="">No hay servicios disponibles</option>';
             return;
         }
         servicios.forEach(s => {
@@ -409,7 +405,7 @@ async function cancelarCita(id) {
             body: JSON.stringify({ cita_id: id })
         });
         const data = await res.json();
-        alert(data.mensaje || data.error);
+        mostrarToast(data.mensaje || data.error, res.ok ? 'exito' : 'error');
         if (res.ok) consultarCitas();
     } catch (e) { alert('Error.'); }
 }
@@ -423,7 +419,7 @@ async function solicitarModificacion(id) {
             body: JSON.stringify({ cita_original_id: id, nueva_fecha: nf, nueva_hora: nh })
         });
         const data = await res.json();
-        alert(data.mensaje || data.error);
+        mostrarToast(data.mensaje || data.error, res.ok ? 'exito' : 'error');
         if (res.ok) consultarCitas();
     } catch (e) { alert('Error.'); }
 }
@@ -543,7 +539,7 @@ async function cargarHistorial() {
 }
 
 async function cancelarCitaConfirmada(id) {
-    if (!confirm('¿Cancelar?')) return;
+    if (!await mostrarConfirmacion('¿Cancelar?')) return;
     try {
         const res = await fetch(`${API_URL}/api/panel/cancelar-cita-confirmada`, {
             method: 'POST', headers: getAuthHeaders(),
@@ -577,6 +573,10 @@ function abrirFormBarbero() {
     document.getElementById('barberoEmail').value = '';
     document.getElementById('barberoHoraInicio').value = '08:00';
     document.getElementById('barberoHoraFin').value = '17:00';
+    document.getElementById('barberoConPausa').value = 'no';
+    document.getElementById('barberoPausaInicio').value = '12:00';
+    document.getElementById('barberoPausaFin').value = '14:00';
+    toggleCamposPausa();
     document.querySelectorAll('.dia-check').forEach(c => c.checked = true);
     document.getElementById('mensajeBarbero').style.display = 'none';
 }
@@ -586,15 +586,19 @@ function cerrarFormBarbero() { document.getElementById('formBarbero').style.disp
 async function guardarBarbero() {
     const id = document.getElementById('barberoEditId').value;
     const nombre = document.getElementById('barberoNombre').value.trim();
-    if (!nombre) { alert('Nombre obligatorio'); return; }
+    if (!nombre) { mostrarToast('El nombre es obligatorio', 'error'); return; }
     const dias = Array.from(document.querySelectorAll('.dia-check:checked')).map(c => c.value);
-    if (!dias.length) { alert('Selecciona días'); return; }
+    if (!dias.length) { mostrarToast('Selecciona días', 'error'); return; }
+    
+    const conPausa = document.getElementById('barberoConPausa').value === 'si';
     const body = {
         nombre,
         telefono: document.getElementById('barberoTelefono').value.trim(),
         email: document.getElementById('barberoEmail').value.trim(),
         hora_inicio: document.getElementById('barberoHoraInicio').value,
         hora_fin: document.getElementById('barberoHoraFin').value,
+        pausa_inicio: conPausa ? document.getElementById('barberoPausaInicio').value : null,
+        pausa_fin: conPausa ? document.getElementById('barberoPausaFin').value : null,
         dias_trabajo: dias
     };
     const url = id ? `${API_URL}/api/admin/barberos/${id}` : `${API_URL}/api/admin/barberos`;
@@ -602,19 +606,16 @@ async function guardarBarbero() {
     try {
         const res = await fetch(url, { method, headers: getAuthHeaders(), body: JSON.stringify(body) });
         const d = await res.json();
-        const msg = document.getElementById('mensajeBarbero');
-        msg.className = 'mensaje ' + (res.ok ? 'exito' : 'error');
-        msg.textContent = d.mensaje || d.error;
-        msg.style.display = 'block';
+        mostrarToast(d.mensaje || d.error, res.ok ? 'exito' : 'error');
         if (res.ok) {
             setTimeout(() => {
                 cerrarFormBarbero();
                 cargarBarberos();
                 cargarBarberosSelectorAdmin();
                 cargarBarberosCliente();
-            }, 2500);
+            }, 1500);
         }
-    } catch (e) { alert('Error.'); }
+    } catch (e) { mostrarToast('Error al conectar', 'error'); }
 }
 
 async function cargarBarberos() {
@@ -663,12 +664,20 @@ async function editarBarbero(id) {
         document.getElementById('barberoEmail').value = b.email || '';
         document.getElementById('barberoHoraInicio').value = b.hora_inicio || '08:00';
         document.getElementById('barberoHoraFin').value = b.hora_fin || '17:00';
+        if (b.pausa_inicio && b.pausa_fin) {
+            document.getElementById('barberoConPausa').value = 'si';
+            document.getElementById('barberoPausaInicio').value = b.pausa_inicio;
+            document.getElementById('barberoPausaFin').value = b.pausa_fin;
+        } else {
+            document.getElementById('barberoConPausa').value = 'no';
+        }
+        toggleCamposPausa();
         let dias = [];
         try { dias = JSON.parse(b.dias_trabajo); } catch (e) {}
         document.querySelectorAll('.dia-check').forEach(c => c.checked = dias.includes(c.value));
         document.getElementById('formBarbero').style.display = 'block';
         document.getElementById('formBarbero').scrollIntoView({ behavior: 'smooth' });
-    } catch (e) { alert('Error.'); }
+    } catch (e) { mostrarToast('Error al cargar datos', 'error'); }
 }
 
 async function desactivarBarbero(id) {
@@ -1032,6 +1041,7 @@ async function bloquearDias() {
 
 // ===== INICIALIZACIÓN =====
 document.addEventListener('DOMContentLoaded', function() {
+    cargarModo();
     cargarSesion();
     actualizarUISegunRol();
     try {
@@ -1049,7 +1059,57 @@ document.addEventListener('DOMContentLoaded', function() {
     cargarBarberosCliente();
 });
 
-// Exponer al global
+// TOASTS
+function mostrarToast(mensaje, tipo = 'info', duracion = 3500) {
+    const cont = document.getElementById('toast-container');
+    if (!cont) return;
+    const toast = document.createElement('div');
+    toast.className = `toast ${tipo}`;
+    toast.textContent = mensaje;
+    cont.appendChild(toast);
+    setTimeout(() => {
+        toast.style.animation = 'slideOut 0.3s ease';
+        setTimeout(() => toast.remove(), 300);
+    }, duracion);
+}
+
+// MODAL
+let modalResolve = null;
+function mostrarConfirmacion(mensaje, titulo = 'Confirmar') {
+    return new Promise(resolve => {
+        modalResolve = resolve;
+        document.getElementById('modal-titulo').textContent = titulo;
+        document.getElementById('modal-mensaje').textContent = mensaje;
+        document.getElementById('modal-overlay').classList.add('activo');
+    });
+}
+function cerrarModal(resultado) {
+    document.getElementById('modal-overlay').classList.remove('activo');
+    if (modalResolve) { modalResolve(resultado); modalResolve = null; }
+}
+
+function toggleModo() {
+    document.body.classList.toggle('modo-claro');
+    const modo = document.body.classList.contains('modo-claro') ? 'claro' : 'oscuro';
+    try { localStorage.setItem('modo', modo); } catch (e) {}
+    mostrarToast(`Modo ${modo}`, 'info');
+}
+function cargarModo() {
+    try {
+        if (localStorage.getItem('modo') === 'claro') document.body.classList.add('modo-claro');
+    } catch (e) {}
+}
+
+function toggleCamposPausa() {
+    const val = document.getElementById('barberoConPausa').value;
+    document.getElementById('campoPausaInicio').style.display = val === 'si' ? 'block' : 'none';
+    document.getElementById('campoPausaFin').style.display = val === 'si' ? 'block' : 'none';
+}
+window.toggleCamposPausa = toggleCamposPausa;
+window.toggleModo = toggleModo;
+window.mostrarToast = mostrarToast;
+window.mostrarConfirmacion = mostrarConfirmacion;
+window.cerrarModal = cerrarModal;
 window.cambiarVista = cambiarVista;
 window.cambiarTabCliente = cambiarTabCliente;
 window.cambiarTabBarbero = cambiarTabBarbero;
