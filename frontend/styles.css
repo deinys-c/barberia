@@ -141,9 +141,76 @@ select option { background: #1a1410; color: #f0d5a8; }
 .panel-tab { animation: fadeIn 0.3s ease; }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
-/* ================================================ */
-/* ===== MODO CLARO (DARK → LIGHT) ===== */
-/* ================================================ */
+/* ===== ESTADÍSTICAS ===== */
+.resumen-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 15px;
+    margin-bottom: 25px;
+}
+.resumen-card {
+    background: linear-gradient(135deg, rgba(201, 168, 76, 0.15), rgba(201, 168, 76, 0.05));
+    border: 1px solid rgba(201, 168, 76, 0.3);
+    border-radius: 12px;
+    padding: 20px;
+    text-align: center;
+}
+.resumen-valor {
+    color: #c9a84c;
+    font-size: 2rem;
+    font-weight: 700;
+    margin-bottom: 5px;
+}
+.resumen-etiqueta {
+    color: #8a7a6a;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+.graficos-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 20px;
+}
+.grafico-card {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(201, 168, 76, 0.15);
+    border-radius: 12px;
+    padding: 20px;
+}
+.grafico-card h4 {
+    color: #f0d5a8;
+    font-weight: 400;
+    margin-bottom: 15px;
+    font-size: 1.1rem;
+}
+.grafico-card canvas {
+    max-height: 250px;
+}
+#topClientes {
+    padding: 10px;
+}
+.cliente-top-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 0;
+    border-bottom: 1px solid rgba(201, 168, 76, 0.1);
+    color: #f0d5a8;
+}
+.cliente-top-item:last-child {
+    border-bottom: none;
+}
+.cliente-top-citas {
+    color: #c9a84c;
+    font-weight: 700;
+}
+.sin-datos-stats {
+    color: #8a7a6a;
+    text-align: center;
+    padding: 30px;
+    font-style: italic;
+}
 
 /* ================================================ */
 /* ===== MODO CLARO (DARK → LIGHT) ===== */
@@ -269,6 +336,15 @@ body.modo-claro .modal-box { background: #ffffff; border-color: #6a4a2a; }
 body.modo-claro .modal-box h3 { color: #2c1a12; }
 body.modo-claro .modal-box p { color: #6a4a2a; }
 
+/* Estadísticas modo claro */
+body.modo-claro .resumen-card { background: #f0e0c0; border-color: #8b6a1a; }
+body.modo-claro .resumen-valor { color: #6a4a2a; }
+body.modo-claro .resumen-etiqueta { color: #6a4a2a; }
+body.modo-claro .grafico-card { background: #faf5ea; border-color: rgba(139, 106, 26, 0.3); }
+body.modo-claro .grafico-card h4 { color: #2c1a12; }
+body.modo-claro .cliente-top-item { color: #2c1a12; }
+body.modo-claro .cliente-top-citas { color: #6a4a2a; }
+
 /* ================================================ */
 /* ===== RESPONSIVE ===== */
 /* ================================================ */
@@ -294,10 +370,14 @@ body.modo-claro .modal-box p { color: #6a4a2a; }
     .filtros-container { flex-direction: column; }
     
     /* Modo claro móvil */
-    body.modo-claro .tabs button { background: rgba(139, 106, 26, 0.08); color: #6a4a2a; }
-    body.modo-claro .tabs button.activo { background: #8b6a1a; color: #f5f0e8; }
-    body.modo-claro .header-actions button { background: rgba(139, 106, 26, 0.1); color: #2c1a12; }
-    body.modo-claro .header-actions button.activo { background: #8b6a1a; color: #f5f0e8; }
+    body.modo-claro .tabs button { background: #e8d0a8; color: #2c1a12; }
+    body.modo-claro .tabs button.activo { background: #6a4a2a; color: #f5f0e8; }
+    body.modo-claro .header-actions button { background: #e8d0a8; color: #2c1a12; }
+    body.modo-claro .header-actions button.activo { background: #6a4a2a; color: #f5f0e8; }
+    
+    /* Estadísticas responsive */
+    .resumen-valor { font-size: 1.5rem; }
+    .grafico-card canvas { max-height: 200px; }
 }
 
 @media (max-width: 480px) {
@@ -309,24 +389,7 @@ body.modo-claro .modal-box p { color: #6a4a2a; }
     .estilos-grid { grid-template-columns: 1fr 1fr; }
     .huecos-grid button { padding: 6px 12px; font-size: 0.8rem; min-width: 60px; }
     .btn { padding: 10px 20px; font-size: 0.9rem; }
-    
-    /* Modo claro móvil extra */
-    body.modo-claro .tabs button { 
-        background: rgba(139, 106, 26, 0.08) !important; 
-        color: #2c1a12 !important; 
-        border: 1px solid rgba(139, 106, 26, 0.2) !important;
-    }
-    body.modo-claro .tabs button.activo { 
-        background: #8b6a1a !important; 
-        color: #f5f0e8 !important; 
-    }
-    body.modo-claro .header-actions button { 
-        background: rgba(139, 106, 26, 0.1) !important; 
-        border: 1px solid #8b6a1a !important;
-        color: #2c1a12 !important; 
-    }
-    body.modo-claro .header-actions button.activo { 
-        background: #8b6a1a !important; 
-        color: #f5f0e8 !important; 
-    }
+    .resumen-grid { grid-template-columns: 1fr 1fr; }
+    .resumen-valor { font-size: 1.3rem; }
+    .graficos-grid { grid-template-columns: 1fr; }
 }

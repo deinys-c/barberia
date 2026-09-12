@@ -242,8 +242,13 @@ function cambiarTabBarbero(tab) {
         b[4].classList.add('activo'); document.getElementById('tabCatalogo').style.display = 'block';
         cargarCatalogoAdmin();
     }
+    else if (tab === 'estadisticas') {
+        if (!esAdmin()) { alert('Solo admin'); return; }
+        b[5].classList.add('activo'); document.getElementById('tabEstadisticas').style.display = 'block';
+        cargarEstadisticas();
+    }
     else if (tab === 'configuracion') {
-        b[5].classList.add('activo'); document.getElementById('tabConfiguracion').style.display = 'block';
+        b[6].classList.add('activo'); document.getElementById('tabConfiguracion').style.display = 'block';
         cargarBarberosSelectorAdmin();
     }
 }
@@ -1243,6 +1248,179 @@ function avisarPorWhatsApp(nombre, telefono, fecha, hora, accion) {
     window.open(`https://wa.me/${numero}?text=${mensajeCod}`, '_blank');
 }
 
+
+// ===== ESTADÍSTICAS =====
+let charts = {};
+
+async function cargarEstadisticas() {
+    try {
+        const res = await fetch(`${API_URL}/api/admin/estadisticas`, { headers: getAuthHeaders() });
+        if (res.status === 401) {
+            mostrarToast('Sesión expirada', 'error');
+            return;
+        }
+        const data = await res.json();
+        if (data.error) {
+            mostrarToast(data.error, 'error');
+            return;
+        }
+        
+        // Resumen
+        document.getElementById('statCitasMes').textContent = data.resumen.citas_mes_actual;
+        document.getElementById('statCitasTotal').textContent = data.resumen.citas_totales;
+        document.getElementById('statClientes').textContent = data.resumen.total_clientes;
+        document.getElementById('statIngresos').textContent = '$' + Number(data.resumen.ingresos_totales).toLocaleString('es-CO');
+        
+        // Gráfico de citas por mes
+        dibujarGraficoBarras('graficoCitas', data.citas_mes.etiquetas, data.citas_mes.valores, 'Citas');
+        
+        // Gráfico de ingresos
+        dibujarGraficoLineas('graficoIngresos', data.ingresos_mes.etiquetas, data.ingresos_mes.valores);
+        
+        // Gráfico de barberos
+        dibujarGraficoDona('graficoBarberos', data.barberos.nombres, data.barberos.cantidades);
+        
+        // Top clientes
+        dibujarTopClientes(data.clientes_top);
+        
+    } catch (e) {
+        console.error('Error cargando estadísticas:', e);
+        mostrarToast('Error al cargar estadísticas', 'error');
+    }
+}
+
+function dibujarGraficoBarras(id, etiquetas, valores, label) {
+    const ctx = document.getElementById(id);
+    if (!ctx) return;
+    if (charts[id]) charts[id].destroy();
+    charts[id] = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: etiquetas,
+            datasets: [{
+                label: label,
+                data: valores,
+                backgroundColor: 'rgba(201, 168, 76, 0.6)',
+                borderColor: '#c9a84c',
+                borderWidth: 1,
+                borderRadius: 6
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: {
+                legend: { display: false }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: { color: '#8a7a6a', stepSize: 1 }
+                },
+                x: {
+                    ticks: { color: '#8a7a6a' }
+                }
+            }
+        }
+    });
+}
+
+function dibujarGraficoLineas(id, etiquetas, valores) {
+    const ctx = document.getElementById(id);
+    if (!ctx) return;
+    if (charts[id]) charts[id].destroy();
+    charts[id] = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: etiquetas,
+            datasets: [{
+                label: 'Ingresos (COP)',
+                data: valores,
+                borderColor: '#c9a84c',
+                backgroundColor: 'rgba(201, 168, 76, 0.15)',
+                tension: 0.3,
+                fill: true,
+                pointBackgroundColor: '#c9a84c',
+                pointRadius: 5
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: {
+                legend: { display: false }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: { 
+                        color: '#8a7a6a',
+                        callback: function(value) {
+                            return '$' + Number(value).toLocaleString('es-CO');
+                        }
+                    }
+                },
+                x: {
+                    ticks: { color: '#8a7a6a' }
+                }
+            }
+        }
+    });
+}
+
+function dibujarGraficoDona(id, nombres, cantidades) {
+    const ctx = document.getElementById(id);
+    if (!ctx) return;
+    if (charts[id]) charts[id].destroy();
+    
+    const colores = [
+        'rgba(201, 168, 76, 0.8)',
+        'rgba(212, 184, 120, 0.8)',
+        'rgba(139, 106, 26, 0.8)',
+        'rgba(240, 213, 168, 0.8)',
+        'rgba(106, 74, 42, 0.8)'
+    ];
+    
+    charts[id] = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: nombres,
+            datasets: [{
+                data: cantidades,
+                backgroundColor: colores,
+                borderColor: '#1a1410',
+                borderWidth: 2
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: { color: '#f0d5a8' }
+                }
+            }
+        }
+    });
+}
+
+function dibujarTopClientes(clientes) {
+    const cont = document.getElementById('topClientes');
+    if (!cont) return;
+    if (!clientes || !clientes.length) {
+        cont.innerHTML = '<div class="sin-datos-stats">Aún no hay datos de clientes</div>';
+        return;
+    }
+    cont.innerHTML = clientes.map((c, i) => `
+        <div class="cliente-top-item">
+            <span>${i+1}. ${escaparHTML(c.nombre)}</span>
+            <span class="cliente-top-citas">${c.total_citas} citas</span>
+        </div>
+    `).join('');
+}
+
+window.cargarEstadisticas = cargarEstadisticas;
 window.avisarPorWhatsApp = avisarPorWhatsApp;
 window.reactivarBarbero = reactivarBarbero;
 window.toggleCamposPausa = toggleCamposPausa;

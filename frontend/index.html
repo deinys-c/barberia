@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gocho Barber - Reserva de Citas</title>
     <link rel="stylesheet" href="styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
 <body>
 
@@ -34,6 +35,7 @@
         <button onclick="cambiarTabBarbero('barberos')" class="solo-admin" style="display:none;">Barberos</button>
         <button onclick="cambiarTabBarbero('servicios')">Servicios</button>
         <button onclick="cambiarTabBarbero('catalogo')" class="solo-admin" style="display:none;">Catalogo</button>
+        <button onclick="cambiarTabBarbero('estadisticas')" class="solo-admin" style="display:none;">Estadisticas</button>
         <button onclick="cambiarTabBarbero('configuracion')">Configuracion</button>
     </div>
 
@@ -150,26 +152,26 @@
                     <label>Email</label>
                     <input type="email" id="barberoEmail" maxlength="100">
                     <div class="row">
-                        <div><label>Hora inicio</label><input type="time" id="barberoHoraInicio" value="08:00"></div>
-                        <div><label>Hora fin</label><input type="time" id="barberoHoraFin" value="17:00"></div>
+                        <div><label>Hora inicio *</label><input type="time" id="barberoHoraInicio" value="08:00"></div>
+                        <div><label>Hora fin *</label><input type="time" id="barberoHoraFin" value="17:00"></div>
                     </div>
-<div class="row">
-    <div>
-        <label>¿Tiene pausa?</label>
-        <select id="barberoConPausa" onchange="toggleCamposPausa()">
-            <option value="no">No</option>
-            <option value="si">Sí (para comer, descansar)</option>
-        </select>
-    </div>
-    <div id="campoPausaInicio" style="display:none;">
-        <label>Pausa inicio</label>
-        <input type="time" id="barberoPausaInicio" value="12:00">
-    </div>
-    <div id="campoPausaFin" style="display:none;">
-        <label>Pausa fin</label>
-        <input type="time" id="barberoPausaFin" value="14:00">
-    </div>
-</div>
+                    <div class="row">
+                        <div>
+                            <label>¿Tiene pausa?</label>
+                            <select id="barberoConPausa" onchange="toggleCamposPausa()">
+                                <option value="no">No</option>
+                                <option value="si">Sí (para comer, descansar)</option>
+                            </select>
+                        </div>
+                        <div id="campoPausaInicio" style="display:none;">
+                            <label>Pausa inicio</label>
+                            <input type="time" id="barberoPausaInicio" value="12:00">
+                        </div>
+                        <div id="campoPausaFin" style="display:none;">
+                            <label>Pausa fin</label>
+                            <input type="time" id="barberoPausaFin" value="14:00">
+                        </div>
+                    </div>
                     <div class="info-nota">
                         <strong>Nota:</strong> El usuario y contraseña se generan automáticamente.<br>
                         Ej: <code>Pepe</code> → usuario <code>pepe</code>, contraseña <code>pepe123</code>
@@ -259,6 +261,51 @@
                 </div>
                 
                 <div id="listaCatalogo" style="margin-top:20px;"></div>
+            </div>
+
+            <!-- ESTADISTICAS (solo admin) -->
+            <div id="tabEstadisticas" class="panel-tab" style="display:none;">
+                <h3>Estadisticas</h3>
+                
+                <!-- Resumen -->
+                <div class="resumen-grid" id="resumenStats">
+                    <div class="resumen-card">
+                        <div class="resumen-valor" id="statCitasMes">0</div>
+                        <div class="resumen-etiqueta">Citas este mes</div>
+                    </div>
+                    <div class="resumen-card">
+                        <div class="resumen-valor" id="statCitasTotal">0</div>
+                        <div class="resumen-etiqueta">Citas totales</div>
+                    </div>
+                    <div class="resumen-card">
+                        <div class="resumen-valor" id="statClientes">0</div>
+                        <div class="resumen-etiqueta">Clientes</div>
+                    </div>
+                    <div class="resumen-card">
+                        <div class="resumen-valor" id="statIngresos">$0</div>
+                        <div class="resumen-etiqueta">Ingresos estimados</div>
+                    </div>
+                </div>
+                
+                <!-- Gráficos -->
+                <div class="graficos-grid">
+                    <div class="grafico-card">
+                        <h4>Citas por mes</h4>
+                        <canvas id="graficoCitas"></canvas>
+                    </div>
+                    <div class="grafico-card">
+                        <h4>Ingresos por mes</h4>
+                        <canvas id="graficoIngresos"></canvas>
+                    </div>
+                    <div class="grafico-card">
+                        <h4>Citas por barbero</h4>
+                        <canvas id="graficoBarberos"></canvas>
+                    </div>
+                    <div class="grafico-card">
+                        <h4>Top 5 clientes</h4>
+                        <div id="topClientes"></div>
+                    </div>
+                </div>
             </div>
 
             <!-- CONFIGURACION -->
