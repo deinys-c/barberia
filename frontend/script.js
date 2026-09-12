@@ -631,19 +631,35 @@ async function cargarBarberos() {
         barberos.forEach(b => {
             const div = document.createElement('div');
             div.className = 'cita-item';
+            div.style.opacity = b.activo ? 1 : 0.6;
+            
             let botones = '';
             if (esAdmin()) {
-                botones = `
-                    <button class="btn-modificar" onclick="editarBarbero(${b.id})">Editar</button>
-                    ${b.activo ? `<button class="btn-danger" onclick="desactivarBarbero(${b.id})">Desactivar</button>` : ''}
-                    <button class="btn-danger" style="background:#5a1a1a;" onclick="eliminarBarberoPermanente(${b.id})">🗑️ Eliminar</button>
-                `;
+                if (b.activo) {
+                    // Barbero activo: editar, desactivar, eliminar
+                    botones = `
+                        <button class="btn-modificar" onclick="editarBarbero(${b.id})">Editar</button>
+                        <button class="btn-danger" onclick="desactivarBarbero(${b.id})">Desactivar</button>
+                        <button class="btn-danger" style="background:#5a1a1a;" onclick="eliminarBarberoPermanente(${b.id})">🗑️</button>
+                    `;
+                } else {
+                    // Barbero inactivo: reactivar, editar, eliminar
+                    botones = `
+                        <button class="btn-success" onclick="reactivarBarbero(${b.id})">✅ Reactivar</button>
+                        <button class="btn-modificar" onclick="editarBarbero(${b.id})">Editar</button>
+                        <button class="btn-danger" style="background:#5a1a1a;" onclick="eliminarBarberoPermanente(${b.id})">🗑️</button>
+                    `;
+                }
             }
+            
+            const horario = `${escaparHTML(b.hora_inicio || '08:00')} - ${escaparHTML(b.hora_fin || '17:00')}`;
+            const pausa = (b.pausa_inicio && b.pausa_fin) ? ` | Pausa: ${escaparHTML(b.pausa_inicio)} - ${escaparHTML(b.pausa_fin)}` : '';
+            
             div.innerHTML = `
                 <div class="info">
-                    <div class="fecha-hora">${escaparHTML(b.nombre)}</div>
+                    <div class="fecha-hora">${escaparHTML(b.nombre)} ${!b.activo ? '<small style="color:#8a7a6a;">(Inactivo)</small>' : ''}</div>
                     <div class="cliente">${escaparHTML(b.telefono || 'Sin tel')} - ${escaparHTML(b.email || 'Sin email')}</div>
-                    <div class="barbero-info">Horario: ${escaparHTML(b.hora_inicio || '08:00')} - ${escaparHTML(b.hora_fin || '17:00')} | Estado: ${b.activo ? 'Activo' : 'Inactivo'}</div>
+                    <div class="barbero-info">Horario: ${horario}${pausa} | Estado: ${b.activo ? 'Activo' : 'Inactivo'}</div>
                 </div>
                 <div class="acciones">${botones}</div>
             `;
@@ -1105,6 +1121,25 @@ function toggleCamposPausa() {
     document.getElementById('campoPausaInicio').style.display = val === 'si' ? 'block' : 'none';
     document.getElementById('campoPausaFin').style.display = val === 'si' ? 'block' : 'none';
 }
+
+async function reactivarBarbero(id) {
+    if (!confirm('¿Reactivar este barbero?')) return;
+    try {
+        const res = await fetch(`${API_URL}/api/admin/barberos/${id}/reactivar`, {
+            method: 'PUT',
+            headers: getAuthHeaders()
+        });
+        const d = await res.json();
+        alert(d.mensaje || d.error);
+        if (res.ok) {
+            cargarBarberos();
+            cargarBarberosSelectorAdmin();
+            cargarBarberosCliente();
+        }
+    } catch (e) { alert('Error.'); }
+}
+
+window.reactivarBarbero = reactivarBarbero;
 window.toggleCamposPausa = toggleCamposPausa;
 window.toggleModo = toggleModo;
 window.mostrarToast = mostrarToast;

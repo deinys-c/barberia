@@ -10,12 +10,18 @@ admin_bp = Blueprint('admin', __name__)
 
 @admin_bp.route('/api/admin/barberos', methods=['GET'])
 def listar_barberos():
+    """Lista todos los barberos (activos e inactivos)."""
     user, error, code = requiere_autenticacion()
     if error: return error, code
     try:
         conn = get_db()
         cursor = conn.cursor()
-        cursor.execute('SELECT id, nombre, telefono, email, hora_inicio, hora_fin, dias_trabajo, activo FROM barberos ORDER BY activo DESC, nombre')
+        cursor.execute('''
+            SELECT id, nombre, telefono, email, hora_inicio, hora_fin, 
+                   pausa_inicio, pausa_fin, dias_trabajo, activo 
+            FROM barberos 
+            ORDER BY activo DESC, nombre
+        ''')
         barberos = cursor.fetchall()
         conn.close()
         return jsonify([dict(b) for b in barberos])
@@ -24,6 +30,7 @@ def listar_barberos():
 
 @admin_bp.route('/api/admin/barberos', methods=['POST'])
 def crear_barbero():
+    """Crea un nuevo barbero."""
     user, error, code = requiere_admin()
     if error: return error, code
     data = request.json
@@ -37,13 +44,18 @@ def crear_barbero():
         dias = data.get('dias_trabajo', ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado'])
         hora_inicio = data.get('hora_inicio', '08:00')
         hora_fin = data.get('hora_fin', '17:00')
+        pausa_inicio = data.get('pausa_inicio') or None
+        pausa_fin = data.get('pausa_fin') or None
+        
         cursor.execute('''
-            INSERT INTO barberos (nombre, telefono, email, hora_inicio, hora_fin, dias_trabajo)
-            VALUES (%s, %s, %s, %s, %s, %s) RETURNING id
+            INSERT INTO barberos (nombre, telefono, email, hora_inicio, hora_fin, pausa_inicio, pausa_fin, dias_trabajo)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id
         ''', (data['nombre'].strip(), data.get('telefono', '').strip(),
-              data.get('email', '').strip(), hora_inicio, hora_fin, json.dumps(dias)))
+              data.get('email', '').strip(), hora_inicio, hora_fin,
+              pausa_inicio, pausa_fin, json.dumps(dias)))
         nuevo_id = cursor.fetchone()['id']
         
+        # Generar usuario automático
         username_base = normalizar_username(data['nombre'])
         username = username_base
         contador = 2
@@ -82,6 +94,7 @@ def crear_barbero():
 
 @admin_bp.route('/api/admin/barberos/<int:barbero_id>', methods=['PUT'])
 def actualizar_barbero(barbero_id):
+    """Actualiza un barbero existente."""
     user, error, code = requiere_admin()
     if error: return error, code
     data = request.json
@@ -110,6 +123,12 @@ def actualizar_barbero(barbero_id):
             campos.append('hora_inicio = %s'); valores.append(data['hora_inicio'])
         if 'hora_fin' in data:
             campos.append('hora_fin = %s'); valores.append(data['hora_fin'])
+        if 'pausa_inicio' in data:
+            campos.append('pausa_inicio = %s')
+            valores.append(data['pausa_inicio'] if data['pausa_inicio'] else None)
+        if 'pausa_fin' in data:
+            campos.append('pausa_fin = %s')
+            valores.append(data['pausa_fin'] if data['pausa_fin'] else None)
         if 'dias_trabajo' in data:
             campos.append('dias_trabajo = %s'); valores.append(json.dumps(data['dias_trabajo']))
         if 'activo' in data:
@@ -119,6 +138,7 @@ def actualizar_barbero(barbero_id):
             valores.append(barbero_id)
             cursor.execute(f"UPDATE barberos SET {', '.join(campos)} WHERE id = %s", valores)
         
+        # Regenerar usuario si cambió el nombre
         username_gen = password_gen = None
         if nombre_nuevo != nombre_anterior:
             username_base = normalizar_username(nombre_nuevo)
@@ -158,6 +178,7 @@ def actualizar_barbero(barbero_id):
 
 @admin_bp.route('/api/admin/barberos/<int:barbero_id>', methods=['DELETE'])
 def eliminar_barbero(barbero_id):
+    """Desactiva un barbero (soft delete). Cancela sus citas futuras."""
     user, error, code = requiere_admin()
     if error: return error, code
     try:
@@ -191,8 +212,40 @@ def eliminar_barbero(barbero_id):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@admin_bp.route('/api/admin/barberos/<int:barbero_id>/reactivar', methods=['PUT'])
+def reactivar_barbero(barbero_id):
+    """Reactiva un barbero desactivado."""
+    user, error, code = requiere_admin()
+    if error: return error, code
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute('SELECT nombre, activo FROM barberos WHERE id = %s', (barbero_id,))
+        barbero = cursor.fetchone()
+        if not barbero:
+            conn.close()
+            return jsonify({'error': 'Barbero no encontrado'}), 404
+        if barbero['activo'] == 1:
+            conn.close()
+            return jsonify({'error': 'El barbero ya está activo'}), 400
+        
+        # Reactivar barbero y su usuario
+        cursor.execute('UPDATE barberos SET activo = 1 WHERE id = %s', (barbero_id,))
+        cursor.execute('UPDATE usuarios SET activo = 1 WHERE barbero_id = %s', (barbero_id,))
+        conn.commit()
+        conn.close()
+        
+        enviar_telegram(f"✅ <b>Barbero reactivado</b>\n{barbero['nombre']}")
+        
+        return jsonify({
+            'mensaje': f'Barbero "{barbero["nombre"]}" reactivado exitosamente'
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @admin_bp.route('/api/admin/barberos/<int:barbero_id>/permanente', methods=['DELETE'])
 def eliminar_barbero_permanente(barbero_id):
+    """Elimina un barbero permanentemente (solo si no tiene citas futuras)."""
     user, error, code = requiere_admin()
     if error: return error, code
     try:
@@ -231,7 +284,7 @@ def eliminar_barbero_permanente(barbero_id):
 
 @admin_bp.route('/api/admin/servicios', methods=['GET'])
 def servicios_admin():
-    """Admin ve sus propios servicios (si tiene barbero_id) o los de un barbero específico."""
+    """Lista servicios de un barbero específico o de todos."""
     user, error, code = requiere_autenticacion()
     if error: return error, code
     barbero_id = request.args.get('barbero_id', 0, type=int)
@@ -239,14 +292,19 @@ def servicios_admin():
     # Si es barbero, solo puede ver los suyos
     if user['rol'] == 'barbero' and user['barbero_id']:
         barbero_id = user['barbero_id']
-    # Si es admin y no especificó barbero, mostrar todos
     try:
         conn = get_db()
         cursor = conn.cursor()
         if barbero_id > 0:
-            cursor.execute('SELECT id, barbero_id, nombre, duracion_minutos, precio, descripcion, activo FROM servicios WHERE barbero_id = %s ORDER BY id', (barbero_id,))
+            cursor.execute('''
+                SELECT id, barbero_id, nombre, duracion_minutos, precio, descripcion, activo 
+                FROM servicios WHERE barbero_id = %s ORDER BY id
+            ''', (barbero_id,))
         else:
-            cursor.execute('SELECT id, barbero_id, nombre, duracion_minutos, precio, descripcion, activo FROM servicios ORDER BY barbero_id, id')
+            cursor.execute('''
+                SELECT id, barbero_id, nombre, duracion_minutos, precio, descripcion, activo 
+                FROM servicios ORDER BY barbero_id, id
+            ''')
         servicios = cursor.fetchall()
         conn.close()
         return jsonify([dict(s) for s in servicios])
@@ -255,6 +313,7 @@ def servicios_admin():
 
 @admin_bp.route('/api/admin/servicios', methods=['POST'])
 def crear_servicio():
+    """Crea un servicio para un barbero."""
     user, error, code = requiere_autenticacion()
     if error: return error, code
     data = request.json
@@ -263,7 +322,6 @@ def crear_servicio():
     precio = float(data.get('precio', 0))
     barbero_id = int(data.get('barbero_id', 0))
     
-    # Si es barbero, solo puede crear para sí mismo
     if user['rol'] == 'barbero' and user['barbero_id']:
         barbero_id = user['barbero_id']
     if barbero_id == 0:
@@ -291,6 +349,7 @@ def crear_servicio():
 
 @admin_bp.route('/api/admin/servicios/<int:servicio_id>', methods=['PUT'])
 def actualizar_servicio(servicio_id):
+    """Actualiza un servicio existente."""
     user, error, code = requiere_autenticacion()
     if error: return error, code
     data = request.json
@@ -303,7 +362,6 @@ def actualizar_servicio(servicio_id):
             conn.close()
             return jsonify({'error': 'Servicio no encontrado'}), 404
         
-        # Si es barbero, solo puede editar sus propios servicios
         if user['rol'] == 'barbero' and srv['barbero_id'] != user['barbero_id']:
             conn.close()
             return jsonify({'error': 'No autorizado para editar este servicio'}), 403
@@ -342,6 +400,7 @@ def actualizar_servicio(servicio_id):
 
 @admin_bp.route('/api/admin/servicios/<int:servicio_id>', methods=['DELETE'])
 def eliminar_servicio(servicio_id):
+    """Elimina o desactiva un servicio."""
     user, error, code = requiere_autenticacion()
     if error: return error, code
     try:
@@ -375,12 +434,16 @@ def eliminar_servicio(servicio_id):
 
 @admin_bp.route('/api/admin/catalogo', methods=['GET'])
 def catalogo_admin():
+    """Lista todos los items del catálogo."""
     user, error, code = requiere_admin()
     if error: return error, code
     try:
         conn = get_db()
         cursor = conn.cursor()
-        cursor.execute('SELECT id, tipo, archivo, nombre, descripcion, precio, orden, activo FROM catalogo ORDER BY tipo, orden, nombre')
+        cursor.execute('''
+            SELECT id, tipo, archivo, nombre, descripcion, precio, orden, activo 
+            FROM catalogo ORDER BY tipo, orden, nombre
+        ''')
         items = cursor.fetchall()
         conn.close()
         return jsonify([dict(i) for i in items])
@@ -389,6 +452,7 @@ def catalogo_admin():
 
 @admin_bp.route('/api/admin/catalogo', methods=['POST'])
 def crear_item_catalogo():
+    """Crea un nuevo item en el catálogo."""
     user, error, code = requiere_admin()
     if error: return error, code
     data = request.json
@@ -416,6 +480,7 @@ def crear_item_catalogo():
 
 @admin_bp.route('/api/admin/catalogo/<int:item_id>', methods=['PUT'])
 def actualizar_item_catalogo(item_id):
+    """Actualiza un item del catálogo."""
     user, error, code = requiere_admin()
     if error: return error, code
     data = request.json
@@ -447,6 +512,7 @@ def actualizar_item_catalogo(item_id):
 
 @admin_bp.route('/api/admin/catalogo/<int:item_id>', methods=['DELETE'])
 def eliminar_item_catalogo(item_id):
+    """Elimina un item del catálogo."""
     user, error, code = requiere_admin()
     if error: return error, code
     try:
