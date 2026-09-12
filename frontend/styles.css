@@ -145,97 +145,127 @@ select option { background: #1a1410; color: #f0d5a8; }
 /* ===== MODO CLARO (DARK → LIGHT) ===== */
 /* ================================================ */
 
+/* ================================================ */
+/* ===== MODO CLARO (DARK → LIGHT) ===== */
+/* ================================================ */
+
 body.modo-claro { background: #f5f0e8; background-image: none; color: #2c1a12; }
 
 /* Header */
-body.modo-claro .header { background: linear-gradient(135deg, #f0e0c0, #e8d0a8); border-bottom-color: #8b6a1a; }
+body.modo-claro .header { background: linear-gradient(135deg, #f0e0c0, #e8d0a8); border-bottom-color: #6a4a2a; }
 body.modo-claro .header h1 { color: #2c1a12; }
-body.modo-claro .header h1 span { color: #8b6a1a; }
+body.modo-claro .header h1 span { color: #6a4a2a; }
 body.modo-claro .header .slogan { color: #6a4a2a; }
 
-/* Header actions */
-body.modo-claro .header-actions button { background: rgba(139, 106, 26, 0.1); border: 1px solid #8b6a1a; color: #2c1a12; }
-body.modo-claro .header-actions button:hover { background: #8b6a1a; color: #f5f0e8; }
-body.modo-claro .header-actions button.activo { background: #8b6a1a; color: #f5f0e8; }
+/* Header actions (Cliente, Panel, Modo) */
+body.modo-claro .header-actions button { 
+    background: #e8d0a8; 
+    border: 1px solid #6a4a2a; 
+    color: #2c1a12; 
+    font-weight: 600;
+}
+body.modo-claro .header-actions button:hover { 
+    background: #6a4a2a; 
+    color: #f5f0e8; 
+}
+body.modo-claro .header-actions button.activo { 
+    background: #6a4a2a; 
+    color: #f5f0e8; 
+    font-weight: 700;
+    border-color: #2c1a12;
+}
 
-/* Tabs */
-body.modo-claro .tabs button { background: rgba(139, 106, 26, 0.08); color: #6a4a2a; }
-body.modo-claro .tabs button:hover { background: rgba(139, 106, 26, 0.2); color: #2c1a12; }
-body.modo-claro .tabs button.activo { background: #e8d0a8; color: #2c1a12; border-bottom-color: #8b6a1a; font-weight: 700; }
+/* Tabs (Reservar, Mis Citas, etc.) */
+body.modo-claro .tabs button { 
+    background: #e8d0a8; 
+    color: #2c1a12; 
+    border: 1px solid #d4b878;
+    font-weight: 600;
+}
+body.modo-claro .tabs button:hover { 
+    background: #d4b878; 
+    color: #2c1a12; 
+}
+body.modo-claro .tabs button.activo { 
+    background: #6a4a2a; 
+    color: #f5f0e8; 
+    border-bottom-color: #2c1a12; 
+    font-weight: 700;
+}
 
-/* Panels */
-body.modo-claro .panel { background: #ffffff; border-color: rgba(139, 106, 26, 0.25); }
-body.modo-claro .panel h2 { color: #2c1a12; border-bottom-color: rgba(139, 106, 26, 0.2); }
-body.modo-claro .panel h2 small { color: #8b6a1a; }
+/* Paneles */
+body.modo-claro .panel { background: #ffffff; border-color: rgba(106, 74, 42, 0.3); }
+body.modo-claro .panel h2 { color: #2c1a12; border-bottom-color: rgba(106, 74, 42, 0.3); }
+body.modo-claro .panel h2 small { color: #6a4a2a; }
 body.modo-claro .panel h3 { color: #2c1a12; }
 
 /* Labels y formularios */
-body.modo-claro label { color: #8b6a1a; font-weight: 700; }
+body.modo-claro label { color: #6a4a2a; font-weight: 700; }
 body.modo-claro input, 
 body.modo-claro select, 
 body.modo-claro textarea { 
     background: #ffffff; 
-    border: 1px solid #8b6a1a; 
+    border: 1px solid #6a4a2a; 
     color: #2c1a12; 
 }
 body.modo-claro input:focus, 
 body.modo-claro select:focus, 
 body.modo-claro textarea:focus { 
-    border-color: #6a4a2a; 
+    border-color: #2c1a12; 
     background: #ffffff;
-    box-shadow: 0 0 20px rgba(139, 106, 26, 0.2);
+    box-shadow: 0 0 20px rgba(106, 74, 42, 0.3);
 }
 body.modo-claro input::placeholder, 
 body.modo-claro textarea::placeholder { color: #a09080; }
 body.modo-claro select option { background: #ffffff; color: #2c1a12; }
 
 /* Botones */
-body.modo-claro .btn { background: linear-gradient(135deg, #8b6a1a, #6a4a2a); color: #f5f0e8; }
-body.modo-claro .btn:hover { box-shadow: 0 6px 25px rgba(139, 106, 26, 0.3); }
-body.modo-claro .btn-secundario { background: rgba(139, 106, 26, 0.1); color: #2c1a12; border: 1px solid #8b6a1a; }
-body.modo-claro .btn-secundario:hover { background: rgba(139, 106, 26, 0.2); }
+body.modo-claro .btn { background: #6a4a2a; color: #f5f0e8; font-weight: 700; }
+body.modo-claro .btn:hover { background: #2c1a12; box-shadow: 0 6px 25px rgba(106, 74, 42, 0.4); }
+body.modo-claro .btn-secundario { background: #e8d0a8; color: #2c1a12; border: 1px solid #6a4a2a; }
+body.modo-claro .btn-secundario:hover { background: #d4b878; color: #2c1a12; }
 body.modo-claro .btn-danger { background: #a03030; color: #f5f0e8; }
 body.modo-claro .btn-success { background: #2a7a4a; color: #f5f0e8; }
 
 /* Horas */
-body.modo-claro .huecos-grid button { background: rgba(139, 106, 26, 0.1); color: #2c1a12; border: 1px solid #8b6a1a; }
-body.modo-claro .huecos-grid button:hover { background: rgba(139, 106, 26, 0.2); }
-body.modo-claro .huecos-grid button.seleccionado { background: #8b6a1a; color: #f5f0e8; border-color: #8b6a1a; }
-body.modo-claro .sin-huecos { background: rgba(139, 106, 26, 0.05); color: #6a4a2a; border-color: rgba(139, 106, 26, 0.3); }
+body.modo-claro .huecos-grid button { background: #e8d0a8; color: #2c1a12; border: 1px solid #6a4a2a; }
+body.modo-claro .huecos-grid button:hover { background: #d4b878; }
+body.modo-claro .huecos-grid button.seleccionado { background: #6a4a2a; color: #f5f0e8; border-color: #2c1a12; }
+body.modo-claro .sin-huecos { background: #faf5ea; color: #6a4a2a; border-color: rgba(106, 74, 42, 0.3); }
 
 /* Mensajes */
-body.modo-claro .mensaje.exito { background: rgba(42, 122, 74, 0.15); color: #1a5a2a; border-color: rgba(42, 122, 74, 0.3); }
-body.modo-claro .mensaje.error { background: rgba(139, 42, 42, 0.15); color: #6a1a1a; border-color: rgba(139, 42, 42, 0.3); }
-body.modo-claro .mensaje.info { background: rgba(139, 106, 26, 0.1); color: #2c1a12; border-color: rgba(139, 106, 26, 0.3); }
+body.modo-claro .mensaje.exito { background: rgba(42, 122, 74, 0.15); color: #1a5a2a; border-color: rgba(42, 122, 74, 0.4); }
+body.modo-claro .mensaje.error { background: rgba(139, 42, 42, 0.15); color: #6a1a1a; border-color: rgba(139, 42, 42, 0.4); }
+body.modo-claro .mensaje.info { background: rgba(106, 74, 42, 0.1); color: #2c1a12; border-color: rgba(106, 74, 42, 0.3); }
 
 /* Citas */
-body.modo-claro .cita-item { background: rgba(139, 106, 26, 0.06); border-left-color: #8b6a1a; }
+body.modo-claro .cita-item { background: #faf5ea; border-left-color: #6a4a2a; }
 body.modo-claro .cita-item .info .fecha-hora { color: #2c1a12; }
 body.modo-claro .cita-item .info .servicio { color: #6a4a2a; }
 body.modo-claro .cita-item .info .cliente { color: #6a4a2a; }
 body.modo-claro .cita-item .info .barbero-info { color: #6a4a2a; }
 
 /* Login */
-body.modo-claro .login-box { background: #ffffff; border-color: rgba(139, 106, 26, 0.3); }
+body.modo-claro .login-box { background: #ffffff; border-color: rgba(106, 74, 42, 0.3); }
 body.modo-claro .login-box h3 { color: #2c1a12; }
 
 /* Productos y estilos */
-body.modo-claro .producto-card { background: #ffffff; border-color: rgba(139, 106, 26, 0.2); }
+body.modo-claro .producto-card { background: #ffffff; border-color: rgba(106, 74, 42, 0.2); }
 body.modo-claro .producto-card .nombre { color: #2c1a12; }
 body.modo-claro .producto-card .descripcion { color: #6a4a2a; }
-body.modo-claro .producto-card .precio { color: #8b6a1a; }
-body.modo-claro .estilo-card { background: #ffffff; border-color: rgba(139, 106, 26, 0.2); }
+body.modo-claro .producto-card .precio { color: #6a4a2a; }
+body.modo-claro .estilo-card { background: #ffffff; border-color: rgba(106, 74, 42, 0.2); }
 body.modo-claro .estilo-card .nombre { color: #2c1a12; }
 
 /* Checkboxes de días */
 body.modo-claro .dias-container label { color: #2c1a12; }
 
 /* Info nota */
-body.modo-claro .info-nota { background: rgba(139, 106, 26, 0.1); color: #2c1a12; }
-body.modo-claro .info-nota code { background: #e8d0a8; color: #2c1a12; }
+body.modo-claro .info-nota { background: #e8d0a8; color: #2c1a12; }
+body.modo-claro .info-nota code { background: #d4b878; color: #2c1a12; }
 
 /* Modal en modo claro */
-body.modo-claro .modal-box { background: #ffffff; border-color: #8b6a1a; }
+body.modo-claro .modal-box { background: #ffffff; border-color: #6a4a2a; }
 body.modo-claro .modal-box h3 { color: #2c1a12; }
 body.modo-claro .modal-box p { color: #6a4a2a; }
 
