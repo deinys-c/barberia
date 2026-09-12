@@ -527,3 +527,74 @@ def eliminar_item_catalogo(item_id):
         return jsonify({'mensaje': 'Item eliminado'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+# ========== MIGRACIÓN FORZADA (TEMPORAL) ==========
+
+@admin_bp.route('/api/admin/forzar-migracion', methods=['GET'])
+def forzar_migracion():
+    """⚠️ TEMPORAL: Fuerza la migración de columnas."""
+    token = request.args.get('token', '')
+    if token != 'migrar2026':
+        return jsonify({'error': 'Token inválido'}), 403
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        
+        # Detectar si estamos en PostgreSQL
+        from database import USING_POSTGRES
+        is_postgres = USING_POSTGRES
+        
+        def col_existe(tabla, columna):
+            if is_postgres:
+                cursor.execute("""
+                    SELECT 1 FROM information_schema.columns 
+                    WHERE table_name = %s AND column_name = %s
+                """, (tabla, columna))
+                return cursor.fetchone() is not None
+            else:
+                cursor.execute(f"PRAGMA table_info({tabla})")
+                cols = [row[1] for row in cursor.fetchall()]
+                return columna in cols
+        
+        resultados = []
+        
+        # Migrar barberos
+        for col, defn in [
+            ('hora_inicio', "TEXT DEFAULT '08:00'"),
+            ('hora_fin', "TEXT DEFAULT '17:00'"),
+            ('pausa_inicio', "TEXT"),
+            ('pausa_fin', "TEXT"),
+        ]:
+            if not col_existe('barberos', col):
+                cursor.execute(f"ALTER TABLE barberos ADD COLUMN {col} {defn}")
+                resultados.append(f"✅ barberos.{col} agregada")
+            else:
+                resultados.append(f"⏭️ barberos.{col} ya existe")
+        
+        # Migrar servicios
+        if not col_existe('servicios', 'barbero_id'):
+            cursor.execute("ALTER TABLE servicios ADD COLUMN barbero_id INTEGER")
+            cursor.execute("SELECT id FROM barberos WHERE activo = 1 LIMIT 1")
+            b = cursor.fetchone()
+            if b:
+                bid = b['id'] if isinstance(b, dict) else b[0]
+                cursor.execute("UPDATE servicios SET barbero_id = %s WHERE barbero_id IS NULL", (bid,))
+            resultados.append("✅ servicios.barbero_id agregada")
+        else:
+            resultados.append("⏭️ servicios.barbero_id ya existe")
+        
+        conn.commit()
+        
+        # Actualizar valores por defecto en barberos existentes
+        cursor.execute("UPDATE barberos SET hora_inicio = '08:00' WHERE hora_inicio IS NULL")
+        cursor.execute("UPDATE barberos SET hora_fin = '17:00' WHERE hora_fin IS NULL")
+        conn.commit()
+        
+        conn.close()
+        
+        return jsonify({
+            'mensaje': '✅ Migración completada',
+            'resultados': resultados
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
