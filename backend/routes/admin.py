@@ -642,3 +642,30 @@ def asignar_servicios_default():
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+@admin_bp.route('/api/admin/debug-barbero/<int:barbero_id>', methods=['GET'])
+def debug_barbero(barbero_id):
+    """⚠️ TEMPORAL: Muestra los datos crudos de un barbero."""
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT id, nombre, hora_inicio, hora_fin, pausa_inicio, pausa_fin, activo
+            FROM barberos WHERE id = %s
+        ''', (barbero_id,))
+        b = cursor.fetchone()
+        conn.close()
+        if not b:
+            return jsonify({'error': 'No encontrado'}), 404
+        return jsonify({
+            'id': b['id'],
+            'nombre': b['nombre'],
+            'hora_inicio': repr(b['hora_inicio']),
+            'hora_fin': repr(b['hora_fin']),
+            'pausa_inicio': repr(b['pausa_inicio']),
+            'pausa_fin': repr(b['pausa_fin']),
+            'tipo_pausa_inicio': str(type(b['pausa_inicio'])),
+            'activo': b['activo']
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
