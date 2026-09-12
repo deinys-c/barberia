@@ -1055,22 +1055,34 @@ async function bloquearDias() {
     }
 }
 
+// Helper: obtener fecha en zona horaria de Venezuela (UTC-4)
+function fechaVE(diasAdelante = 0) {
+    // Crear fecha actual en UTC
+    const ahora = new Date();
+    // Convertir a hora Venezuela (UTC-4)
+    const ahoraVE = new Date(ahora.getTime() - (4 * 60 * 60 * 1000));
+    // Sumar días
+    ahoraVE.setUTCDate(ahoraVE.getUTCDate() + diasAdelante);
+    // Devolver en formato YYYY-MM-DD
+    return ahoraVE.toISOString().split('T')[0];
+}
+
 // ===== INICIALIZACIÓN =====
 document.addEventListener('DOMContentLoaded', function() {
     cargarModo();
     cargarSesion();
     actualizarUISegunRol();
     try {
-        const f = new Date(); f.setDate(f.getDate() + 1);
-        const fStr = f.toISOString().split('T')[0];
-        const h = new Date();
-        const hStr = h.toISOString().split('T')[0];
+        const fechaManana = fechaVE(1);  // Mañana
+        const fechaHoy = fechaVE(0);      // Hoy
+
         const iF = document.getElementById('fecha');
-        if (iF) { iF.value = fStr; iF.min = hStr; }
+        if (iF) { iF.value = fechaManana; iF.min = fechaHoy; }
+
         const iI = document.getElementById('bloqueoInicio');
         const iFn = document.getElementById('bloqueoFin');
-        if (iI) { iI.value = hStr; iI.min = hStr; }
-        if (iFn) { iFn.value = hStr; iFn.min = hStr; }
+        if (iI) { iI.value = fechaHoy; iI.min = fechaHoy; }
+        if (iFn) { iFn.value = fechaHoy; iFn.min = fechaHoy; }
     } catch (e) {}
     cargarBarberosCliente();
 });
