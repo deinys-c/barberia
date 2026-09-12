@@ -367,7 +367,7 @@ async function reservar() {
 // ===== MIS CITAS =====
 async function consultarCitas() {
     const tel = document.getElementById('telefonoConsulta').value.trim();
-    if (!tel) { alert('Ingresa teléfono'); return; }
+    if (!tel) { mostrarToast('Ingresa teléfono', 'error'); return; }
     const c = document.getElementById('misCitas');
     c.innerHTML = '<div class="sin-huecos">Buscando...</div>';
     try {
@@ -378,19 +378,53 @@ async function consultarCitas() {
         citas.forEach(ct => {
             const div = document.createElement('div');
             div.className = 'cita-item';
-            const ec = ct.estado === 'confirmada' ? 'estado-confirmada' : 'estado-pendiente';
-            const et = ct.estado === 'confirmada' ? 'Confirmada' : 'Pendiente';
+            
+            // Estilos según estado
+            let estadoClase = 'estado-pendiente';
+            let estadoTexto = 'Pendiente';
+            let estiloExtra = '';
+            
+            if (ct.estado === 'confirmada') {
+                estadoClase = 'estado-confirmada';
+                estadoTexto = '✓ Confirmada';
+            } else if (ct.estado === 'pendiente_confirmacion') {
+                estadoClase = 'estado-pendiente';
+                estadoTexto = '⏳ Pendiente';
+            } else if (ct.estado === 'cancelada_por_barbero') {
+                estadoClase = 'estado-expirada';
+                estadoTexto = '❌ Cancelada por el barbero';
+                estiloExtra = 'border-left-color: #d97a7a;';
+            }
+            
+            // Si es cancelada, mostrar aviso grande
+            let avisoCancelada = '';
+            if (ct.estado === 'cancelada_por_barbero') {
+                avisoCancelada = `
+                    <div style="background: rgba(139, 42, 42, 0.2); padding: 10px; border-radius: 6px; margin-bottom: 10px; color: #d97a7a;">
+                        ⚠️ Esta cita fue cancelada. Por favor, agenda una nueva.
+                    </div>
+                `;
+            }
+            
+            // Botones (solo si no está cancelada)
+            let botones = '';
+            if (ct.estado === 'confirmada' || ct.estado === 'pendiente_confirmacion') {
+                botones = `
+                    <button class="btn-cancelar" onclick="cancelarCita(${ct.id})">Cancelar</button>
+                    <button class="btn-modificar" onclick="solicitarModificacion(${ct.id})">Modificar</button>
+                `;
+            }
+            
+            div.style = estiloExtra;
             div.innerHTML = `
                 <div class="info">
+                    ${avisoCancelada}
                     <div class="fecha-hora">${escaparHTML(ct.fecha)} - ${escaparHTML(ct.hora_inicio)}</div>
                     <div class="servicio">${escaparHTML(ct.servicio)}</div>
                     <div class="barbero-info">Barbero: ${escaparHTML(ct.barbero || 'N/A')}</div>
                 </div>
-                <div><span class="estado ${ec}">${et}</span></div>
-                <div class="acciones">
-                    <button class="btn-cancelar" onclick="cancelarCita(${ct.id})">Cancelar</button>
-                    <button class="btn-modificar" onclick="solicitarModificacion(${ct.id})">Modificar</button>
-                </div>
+                <div><span class="estado ${estadoClase}">${estadoTexto}</span></div>
+                <div class="acciones">${botones}</div>
             `;
             c.appendChild(div);
         });
@@ -479,16 +513,28 @@ async function confirmarCita(id) {
 }
 
 async function rechazarCita(id) {
-    if (!confirm('¿Rechazar?')) return;
+    if (!await mostrarConfirmacion('¿Rechazar esta cita?')) return;
     try {
         const res = await fetch(`${API_URL}/api/panel/rechazar-cita`, {
             method: 'POST', headers: getAuthHeaders(),
             body: JSON.stringify({ cita_id: id })
         });
         const d = await res.json();
-        alert(d.mensaje || d.error);
+        if (res.ok) {
+            mostrarToast('✅ Cita rechazada', 'exito');
+            // Ofrecer avisar por WhatsApp
+            if (d.cliente_telefono) {
+                setTimeout(() => {
+                    if (confirm(`¿Avisar a ${d.cliente} por WhatsApp que su cita fue rechazada?`)) {
+                        avisarPorWhatsApp(d.cliente, d.cliente_telefono, d.fecha, d.hora_inicio, 'rechazada');
+                    }
+                }, 500);
+            }
+        } else {
+            mostrarToast(d.error || 'Error', 'error');
+        }
         cargarPendientes();
-    } catch (e) { alert('Error.'); }
+    } catch (e) { mostrarToast('Error al conectar', 'error'); }
 }
 
 // ===== HISTORIAL =====
@@ -539,16 +585,28 @@ async function cargarHistorial() {
 }
 
 async function cancelarCitaConfirmada(id) {
-    if (!await mostrarConfirmacion('¿Cancelar?')) return;
+    if (!await mostrarConfirmacion('¿Cancelar esta cita?')) return;
     try {
         const res = await fetch(`${API_URL}/api/panel/cancelar-cita-confirmada`, {
             method: 'POST', headers: getAuthHeaders(),
             body: JSON.stringify({ cita_id: id })
         });
         const d = await res.json();
-        alert(d.mensaje || d.error);
+        if (res.ok) {
+            mostrarToast('✅ Cita cancelada', 'exito');
+            // Ofrecer avisar por WhatsApp
+            if (d.cliente_telefono) {
+                setTimeout(() => {
+                    if (confirm(`¿Avisar a ${d.cliente} por WhatsApp que su cita fue cancelada?`)) {
+                        avisarPorWhatsApp(d.cliente, d.cliente_telefono, d.fecha, d.hora_inicio, 'cancelada');
+                    }
+                }, 500);
+            }
+        } else {
+            mostrarToast(d.error || 'Error', 'error');
+        }
         if (res.ok) cargarHistorial();
-    } catch (e) { alert('Error.'); }
+    } catch (e) { mostrarToast('Error al conectar', 'error'); }
 }
 
 async function eliminarCitaPermanente(id) {
@@ -1151,6 +1209,41 @@ async function reactivarBarbero(id) {
     } catch (e) { alert('Error.'); }
 }
 
+// ===== AVISAR POR WHATSAPP =====
+function avisarPorWhatsApp(nombre, telefono, fecha, hora, accion) {
+    // Limpiar el teléfono: solo dígitos
+    let numero = String(telefono || '').replace(/\D/g, '');
+    if (!numero) {
+        mostrarToast('El cliente no tiene teléfono registrado', 'error');
+        return;
+    }
+    // Si empieza con 0, asumir Venezuela (+58)
+    if (numero.startsWith('0')) {
+        numero = '58' + numero.substring(1);
+    }
+    // Si no empieza con 58, asumir Venezuela
+    if (!numero.startsWith('58')) {
+        numero = '58' + numero;
+    }
+    
+    // Construir el mensaje
+    let mensaje = '';
+    if (accion === 'rechazada') {
+        mensaje = `Hola ${nombre}, tu solicitud de cita para el ${fecha} a las ${hora} NO pudo ser aceptada. Por favor, contáctanos para agendar en otro horario. - Gocho Barber`;
+    } else if (accion === 'cancelada') {
+        mensaje = `Hola ${nombre}, tu cita del ${fecha} a las ${hora} ha sido cancelada. Disculpa las molestias. Por favor, contáctanos para reagendar. - Gocho Barber`;
+    } else {
+        mensaje = `Hola ${nombre}, te escribimos de Gocho Barber por tu cita del ${fecha} a las ${hora}.`;
+    }
+    
+    // Codificar el mensaje para URL
+    const mensajeCod = encodeURIComponent(mensaje);
+    
+    // Abrir WhatsApp Web en nueva pestaña
+    window.open(`https://wa.me/${numero}?text=${mensajeCod}`, '_blank');
+}
+
+window.avisarPorWhatsApp = avisarPorWhatsApp;
 window.reactivarBarbero = reactivarBarbero;
 window.toggleCamposPausa = toggleCamposPausa;
 window.toggleModo = toggleModo;
