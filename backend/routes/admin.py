@@ -295,7 +295,7 @@ def eliminar_barbero_permanente(barbero_id):
             try:
                 cursor.execute('DELETE FROM barbero_servicios WHERE barbero_id = %s', (barbero_id,))
             except Exception:
-                pass  # Si la tabla no existe, ignorar
+                pass
             
             # Borrar servicios del barbero
             try:
@@ -323,6 +323,9 @@ def eliminar_barbero_permanente(barbero_id):
             conn.close()
             enviar_telegram(f"🗑️ <b>Barbero eliminado permanentemente</b>\n{barbero['nombre']}")
             return jsonify({'mensaje': f'Barbero "{barbero["nombre"]}" eliminado permanentemente'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+            
 
 # ========== SERVICIOS (por barbero) ==========
 
