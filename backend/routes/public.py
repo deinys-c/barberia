@@ -40,12 +40,13 @@ def listar_servicios_publico():
             ''', (barbero_id,))
             servicios = [dict(s) for s in cursor.fetchall()]
         else:
-            # Cuando es "Cualquiera": usar servicios de un barbero representativo
-            # (el primero activo que tenga servicios)
+            # Cuando es "Cualquiera": usar servicios de UN barbero representativo
+            # (el que tenga más servicios, o el primero alfabéticamente)
             cursor.execute('''
-                SELECT DISTINCT barbero_id 
-                FROM servicios WHERE activo = 1 
-                ORDER BY barbero_id 
+                SELECT barbero_id, COUNT(*) as cnt
+                FROM servicios WHERE activo = 1
+                GROUP BY barbero_id
+                ORDER BY cnt DESC, barbero_id ASC
                 LIMIT 1
             ''')
             row = cursor.fetchone()
@@ -63,7 +64,7 @@ def listar_servicios_publico():
         return jsonify(servicios)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
-
+    
 @public_bp.route('/api/catalogo', methods=['GET'])
 def catalogo_publico():
     try:
