@@ -107,9 +107,17 @@ function esAdmin() {
 
 function actualizarUISegunRol() {
     const admin = esAdmin();
+    
+    // Tabs y elementos solo para admin
     document.querySelectorAll('.solo-admin').forEach(el => {
         el.style.setProperty('display', admin ? 'inline-block' : 'none', 'important');
     });
+    
+    // Tabs y elementos solo para barbero
+    document.querySelectorAll('.solo-barbero').forEach(el => {
+        el.style.setProperty('display', admin ? 'none' : 'inline-block', 'important');
+    });
+    
     const filtrosP = document.getElementById('filtrosPendientes');
     const filtrosH = document.getElementById('filtrosHistorial');
     const filaSel = document.getElementById('filaSelectorBloqueo');
