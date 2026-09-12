@@ -575,44 +575,16 @@ def eliminar_item_catalogo(item_id):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-# ========== CAMBIAR CONTRASEÑA (TEMPORAL) ==========
-@admin_bp.route('/api/admin/cambiar-password', methods=['GET'])
-def cambiar_password():
-    """⚠️ TEMPORAL: Cambia la contraseña de un usuario."""
-    token = request.args.get('token', '')
-    if token != 'pass2026':
-        return jsonify({'error': 'Token inválido'}), 403
-    username = request.args.get('username', 'admin')
-    nueva = request.args.get('nueva', '')
-    if not nueva or len(nueva) < 6:
-        return jsonify({'error': 'La contraseña debe tener al menos 6 caracteres'}), 400
-    try:
-        from werkzeug.security import generate_password_hash
-        conn = get_db()
-        cursor = conn.cursor()
-        cursor.execute('SELECT id FROM usuarios WHERE username = %s', (username,))
-        if not cursor.fetchone():
-            conn.close()
-            return jsonify({'error': f'Usuario {username} no existe'}), 404
-        pwd_hash = generate_password_hash(nueva)
-        cursor.execute('UPDATE usuarios SET password_hash = %s WHERE username = %s', (pwd_hash, username))
-        conn.commit()
-        conn.close()
-        return jsonify({
-            'mensaje': f'✅ Contraseña de {username} cambiada exitosamente',
-            'nueva_contraseña': nueva
-        })
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
 # ========== BACKUP ==========
 @admin_bp.route('/api/admin/backup', methods=['GET'])
 def backup_db():
     """Genera un backup completo de la base de datos en JSON."""
+    import os
     token = request.args.get('token', '')
+    TOKEN_BACKUP = os.environ.get('BACKUP_TOKEN', 'backup2026')
     # Token especial para cron jobs, o sesión de admin
     user, _, _ = requiere_autenticacion()
-    if token != 'backup2026' and not (user and user['rol'] == 'admin'):
+    if token != TOKEN_BACKUP and not (user and user['rol'] == 'admin'):
         return jsonify({'error': 'No autorizado'}), 403
     try:
         from datetime import datetime
@@ -625,7 +597,6 @@ def backup_db():
             'datos': {}
         }
         
-        # Tablas a respaldar
         tablas = ['barberos', 'servicios', 'clientes', 'citas', 'bloqueos', 
                   'usuarios', 'catalogo', 'logs_notificaciones']
         
@@ -640,14 +611,12 @@ def backup_db():
         
         conn.close()
         
-        # Convertir a JSON con formato legible
         from flask import Response
         import json as json_lib
         
         json_str = json_lib.dumps(backup, indent=2, default=str, ensure_ascii=False)
         fecha = ahora_ve().strftime('%Y-%m-%d_%H-%M-%S')
         
-        # Si se pide como descarga, devolver archivo
         if request.args.get('descargar') == 'si':
             return Response(
                 json_str,
@@ -668,8 +637,10 @@ def backup_db():
 @admin_bp.route('/api/admin/backup-telegram', methods=['GET'])
 def backup_telegram():
     """Genera backup y lo envía por Telegram."""
+    import os
     token = request.args.get('token', '')
-    if token != 'backup2026':
+    TOKEN_BACKUP = os.environ.get('BACKUP_TOKEN', 'backup2026')
+    if token != TOKEN_BACKUP:
         return jsonify({'error': 'Token inválido'}), 403
     try:
         from datetime import datetime
@@ -701,12 +672,10 @@ def backup_telegram():
         
         conn.close()
         
-        # Convertir a JSON
         json_str = json_lib.dumps(backup, indent=2, default=str, ensure_ascii=False)
         fecha = ahora_ve().strftime('%Y-%m-%d_%H-%M')
         nombre_archivo = f'backup_barberia_{fecha}.json'
         
-        # Enviar a Telegram
         caption = (
             f"📦 <b>Backup Gocho Barber</b>\n"
             f"📅 {ahora_ve().strftime('%d/%m/%Y %H:%M')}\n\n"
