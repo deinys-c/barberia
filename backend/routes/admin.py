@@ -664,3 +664,61 @@ def backup_db():
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+@admin_bp.route('/api/admin/backup-telegram', methods=['GET'])
+def backup_telegram():
+    """Genera backup y lo envía por Telegram."""
+    token = request.args.get('token', '')
+    if token != 'backup2026':
+        return jsonify({'error': 'Token inválido'}), 403
+    try:
+        from datetime import datetime
+        from notificaciones import enviar_telegram_documento
+        import json as json_lib
+        
+        conn = get_db()
+        cursor = conn.cursor()
+        
+        backup = {
+            'fecha_backup': datetime.now().isoformat(),
+            'version': '1.0',
+            'datos': {}
+        }
+        
+        tablas = ['barberos', 'servicios', 'clientes', 'citas', 'bloqueos', 
+                  'usuarios', 'catalogo', 'logs_notificaciones']
+        
+        totales = {}
+        for tabla in tablas:
+            try:
+                cursor.execute(f'SELECT * FROM {tabla}')
+                rows = cursor.fetchall()
+                backup['datos'][tabla] = [dict(r) for r in rows]
+                totales[tabla] = len(rows)
+            except Exception as e:
+                backup['datos'][tabla] = []
+                totales[tabla] = f"error: {e}"
+        
+        conn.close()
+        
+        # Convertir a JSON
+        json_str = json_lib.dumps(backup, indent=2, default=str, ensure_ascii=False)
+        fecha = datetime.now().strftime('%Y-%m-%d_%H-%M')
+        nombre_archivo = f'backup_barberia_{fecha}.json'
+        
+        # Enviar a Telegram
+        caption = (
+            f"📦 <b>Backup Gocho Barber</b>\n"
+            f"📅 {datetime.now().strftime('%d/%m/%Y %H:%M')}\n\n"
+            + "\n".join([f"• {k}: {v}" for k, v in totales.items()])
+        )
+        enviado = enviar_telegram_documento(nombre_archivo, json_str, caption)
+        
+        return jsonify({
+            'mensaje': '✅ Backup enviado por Telegram' if enviado else '❌ Error enviando',
+            'enviado': enviado,
+            'archivo': nombre_archivo,
+            'totales': totales
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
