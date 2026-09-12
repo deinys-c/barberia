@@ -245,7 +245,8 @@ def reactivar_barbero(barbero_id):
 
 @admin_bp.route('/api/admin/barberos/<int:barbero_id>/permanente', methods=['DELETE'])
 def eliminar_barbero_permanente(barbero_id):
-    """Elimina un barbero permanentemente (solo si no tiene citas futuras)."""
+    """Elimina un barbero permanentemente (solo si no tiene citas futuras).
+       Si tiene citas históricas, solo se desactiva."""
     user, error, code = requiere_admin()
     if error: return error, code
     try:
@@ -257,26 +258,47 @@ def eliminar_barbero_permanente(barbero_id):
             conn.close()
             return jsonify({'error': 'Barbero no encontrado'}), 404
         
+        # Verificar citas futuras activas
         hoy = ahora_ve().strftime('%Y-%m-%d')
         cursor.execute('''
             SELECT COUNT(*) as cnt FROM citas 
             WHERE barbero_id = %s AND fecha >= %s 
             AND estado IN ('confirmada', 'pendiente_confirmacion')
         ''', (barbero_id, hoy))
-        cnt = cursor.fetchone()['cnt']
-        if cnt > 0:
+        citas_futuras = cursor.fetchone()['cnt']
+        if citas_futuras > 0:
             conn.close()
-            return jsonify({'error': f'Tiene {cnt} citas activas. Cancélalas primero.'}), 400
+            return jsonify({
+                'error': f'Tiene {citas_futuras} citas activas. Cancélalas primero.'
+            }), 400
         
-        cursor.execute('DELETE FROM servicios WHERE barbero_id = %s', (barbero_id,))
-        cursor.execute('DELETE FROM usuarios WHERE barbero_id = %s', (barbero_id,))
-        cursor.execute('DELETE FROM bloqueos WHERE barbero_id = %s', (barbero_id,))
-        cursor.execute('DELETE FROM barberos WHERE id = %s', (barbero_id,))
-        conn.commit()
-        conn.close()
+        # Verificar si tiene citas históricas
+        cursor.execute('SELECT COUNT(*) as cnt FROM citas WHERE barbero_id = %s', (barbero_id,))
+        citas_historicas = cursor.fetchone()['cnt']
         
-        enviar_telegram(f"🗑️ <b>Barbero eliminado permanentemente</b>\n{barbero['nombre']}")
-        return jsonify({'mensaje': f'Barbero "{barbero["nombre"]}" eliminado permanentemente'})
+        if citas_historicas > 0:
+            # Tiene historial: solo desactivar (no borrar)
+            cursor.execute('UPDATE barberos SET activo = 0 WHERE id = %s', (barbero_id,))
+            cursor.execute('UPDATE usuarios SET activo = 0 WHERE barbero_id = %s', (barbero_id,))
+            # Desactivar sus servicios (no borrar)
+            cursor.execute('UPDATE servicios SET activo = 0 WHERE barbero_id = %s', (barbero_id,))
+            conn.commit()
+            conn.close()
+            enviar_telegram(f"🚫 <b>Barbero desactivado (tenía historial)</b>\n{barbero['nombre']}")
+            return jsonify({
+                'mensaje': f'Barbero "{barbero["nombre"]}" desactivado. No se puede eliminar permanentemente porque tiene {citas_historicas} citas en el historial.',
+                'accion': 'desactivado'
+            })
+        else:
+            # Sin historial: borrar todo
+            cursor.execute('DELETE FROM servicios WHERE barbero_id = %s', (barbero_id,))
+            cursor.execute('DELETE FROM usuarios WHERE barbero_id = %s', (barbero_id,))
+            cursor.execute('DELETE FROM bloqueos WHERE barbero_id = %s', (barbero_id,))
+            cursor.execute('DELETE FROM barberos WHERE id = %s', (barbero_id,))
+            conn.commit()
+            conn.close()
+            enviar_telegram(f"🗑️ <b>Barbero eliminado permanentemente</b>\n{barbero['nombre']}")
+            return jsonify({'mensaje': f'Barbero "{barbero["nombre"]}" eliminado permanentemente'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
