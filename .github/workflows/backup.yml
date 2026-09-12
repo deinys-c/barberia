@@ -1,0 +1,16 @@
+name: Backup Gocho Barber
+
+on:
+  schedule:
+    # Cada domingo a las 12:00 UTC (8 AM Venezuela)
+    - cron: '0 12 * * 0'
+  workflow_dispatch:  # Permite ejecutarlo manualmente
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enviar backup
+        run: |
+          curl -X GET "https://gochobarber.onrender.com/api/admin/backup-telegram?token=backup2026"
+          echo "✅ Backup enviado"
