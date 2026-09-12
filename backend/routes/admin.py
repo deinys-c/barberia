@@ -598,3 +598,47 @@ def forzar_migracion():
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+@admin_bp.route('/api/admin/asignar-servicios-default', methods=['GET'])
+def asignar_servicios_default():
+    """⚠️ TEMPORAL: Asigna servicios por defecto a barberos sin servicios."""
+    token = request.args.get('token', '')
+    if token != 'migrar2026':
+        return jsonify({'error': 'Token inválido'}), 403
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        
+        # Obtener todos los barberos activos
+        cursor.execute('SELECT id, nombre FROM barberos WHERE activo = 1')
+        barberos = cursor.fetchall()
+        
+        resultados = []
+        for b in barberos:
+            barbero_id = b['id']
+            nombre = b['nombre']
+            
+            # Verificar si tiene servicios
+            cursor.execute('SELECT COUNT(*) as cnt FROM servicios WHERE barbero_id = %s', (barbero_id,))
+            cnt = cursor.fetchone()['cnt']
+            
+            if cnt == 0:
+                cursor.execute('''
+                    INSERT INTO servicios (barbero_id, nombre, duracion_minutos, precio) VALUES
+                    (%s, 'Corte', 45, 25000),
+                    (%s, 'Barba', 30, 15000),
+                    (%s, 'Combo (Corte + Barba)', 75, 30000)
+                ''', (barbero_id, barbero_id, barbero_id))
+                resultados.append(f"✅ Servicios creados para {nombre}")
+            else:
+                resultados.append(f"⏭️ {nombre} ya tenía {cnt} servicios")
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({
+            'mensaje': '✅ Servicios asignados',
+            'resultados': resultados
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
