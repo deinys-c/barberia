@@ -692,32 +692,38 @@ def backup_telegram():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
     
-# ========== ESTADÍSTICAS ==========
 @admin_bp.route('/api/admin/estadisticas', methods=['GET'])
 def estadisticas():
-    """Devuelve estadísticas para el dashboard."""
-    user, error, code = requiere_admin()
+    """Estadísticas globales (admin) o solo del barbero (si es barbero)."""
+    user, error, code = requiere_autenticacion()
     if error: return error, code
     try:
-        from datetime import datetime, timedelta
-        from config import DIAS_ES
+        barbero_id = request.args.get('barbero_id', 0, type=int)
+        
+        # Si es barbero, forzar su barbero_id
+        if user['rol'] == 'barbero':
+            barbero_id = user['barbero_id']
         
         conn = get_db()
         cursor = conn.cursor()
-        
-        # Fecha actual en Venezuela
         hoy = ahora_ve()
-        
-        # ========== 1. CITAS E INGRESOS POR MES (últimos 6 meses) ==========
-        citas_mes = []
-        ingresos_mes = []
-        etiquetas_mes = []
         
         meses_es = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 
                     'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
         
+        # Filtro adicional según barbero
+        filtro_barbero = ''
+        params_barbero = []
+        if barbero_id > 0:
+            filtro_barbero = ' AND c.barbero_id = %s'
+            params_barbero = [barbero_id]
+        
+        # ========== 1. CITAS E INGRESOS POR MES ==========
+        citas_mes = []
+        ingresos_mes = []
+        etiquetas_mes = []
+        
         for i in range(5, -1, -1):
-            # Calcular el mes
             mes_actual = hoy.month - i
             anio_actual = hoy.year
             while mes_actual <= 0:
@@ -730,223 +736,104 @@ def estadisticas():
             else:
                 ultimo_dia = f"{anio_actual}-{mes_actual+1:02d}-01"
             
-            # Contar citas del mes (cualquier estado excepto canceladas)
-            cursor.execute('''
-                SELECT COUNT(*) as cnt 
-                FROM citas 
-                WHERE fecha >= %s AND fecha < %s
-                AND estado != 'cancelada_por_cliente' 
-                AND estado != 'cancelada_por_barbero'
-                AND estado != 'cancelada_por_sistema'
-                AND estado != 'expirada'
-            ''', (primer_dia, ultimo_dia))
-            cantidad = cursor.fetchone()['cnt']
-            citas_mes.append(cantidad)
-            
-            # Sumar ingresos estimados (precio de servicios de esas citas)
-            cursor.execute('''
-                SELECT COALESCE(SUM(s.precio), 0) as total
-                FROM citas c
-                JOIN servicios s ON c.servicio_id = s.id
+            query_citas = '''
+                SELECT COUNT(*) as cnt FROM citas c
                 WHERE c.fecha >= %s AND c.fecha < %s
                 AND c.estado NOT IN ('cancelada_por_cliente', 'cancelada_por_barbero', 
                                      'cancelada_por_sistema', 'expirada')
-            ''', (primer_dia, ultimo_dia))
-            ingresos = float(cursor.fetchone()['total'])
-            ingresos_mes.append(ingresos)
-            
-            etiquetas_mes.append(f"{meses_es[mes_actual-1]} {anio_actual}")
-        
-        # ========== 2. CITAS POR BARBERO (todos los tiempos) ==========
-        cursor.execute('''
-            SELECT b.nombre, COUNT(c.id) as total
-            FROM barberos b
-            LEFT JOIN citas c ON c.barbero_id = b.id
-            WHERE b.activo = 1
-            GROUP BY b.id, b.nombre
-            ORDER BY total DESC
-        ''')
-        barberos_data = cursor.fetchall()
-        barberos_nombres = [b['nombre'] for b in barberos_data]
-        barberos_cantidades = [b['total'] for b in barberos_data]
-        
-        # ========== 3. TOP 5 CLIENTES FRECUENTES ==========
-        cursor.execute('''
-            SELECT cl.nombre, cl.telefono, COUNT(c.id) as total_citas
-            FROM clientes cl
-            JOIN citas c ON c.cliente_id = cl.id
-            WHERE c.estado NOT IN ('cancelada_por_cliente', 'cancelada_por_barbero', 
-                                   'cancelada_por_sistema', 'expirada')
-            GROUP BY cl.id, cl.nombre, cl.telefono
-            ORDER BY total_citas DESC
-            LIMIT 5
-        ''')
-        clientes_top = [dict(c) for c in cursor.fetchall()]
-        
-        # ========== 4. RESUMEN GENERAL ==========
-        # Total citas del mes actual
-        primer_dia_mes = f"{hoy.year}-{hoy.month:02d}-01"
-        cursor.execute('''
-            SELECT COUNT(*) as cnt FROM citas 
-            WHERE fecha >= %s
-            AND estado NOT IN ('cancelada_por_cliente', 'cancelada_por_barbero', 
-                               'cancelada_por_sistema', 'expirada')
-        ''', (primer_dia_mes,))
-        citas_mes_actual = cursor.fetchone()['cnt']
-        
-        # Total citas históricas
-        cursor.execute('''
-            SELECT COUNT(*) as cnt FROM citas 
-            WHERE estado NOT IN ('cancelada_por_cliente', 'cancelada_por_barbero', 
-                                 'cancelada_por_sistema', 'expirada')
-        ''')
-        citas_totales = cursor.fetchone()['cnt']
-        
-        # Total clientes
-        cursor.execute('SELECT COUNT(*) as cnt FROM clientes')
-        total_clientes = cursor.fetchone()['cnt']
-        
-        # Total ingresos históricos
-        cursor.execute('''
-            SELECT COALESCE(SUM(s.precio), 0) as total
-            FROM citas c
-            JOIN servicios s ON c.servicio_id = s.id
-            WHERE c.estado NOT IN ('cancelada_por_cliente', 'cancelada_por_barbero', 
-                                   'cancelada_por_sistema', 'expirada')
-        ''')
-        ingresos_totales = float(cursor.fetchone()['total'])
-        
-        conn.close()
-        
-        return jsonify({
-            'citas_mes': {
-                'etiquetas': etiquetas_mes,
-                'valores': citas_mes
-            },
-            'ingresos_mes': {
-                'etiquetas': etiquetas_mes,
-                'valores': ingresos_mes
-            },
-            'barberos': {
-                'nombres': barberos_nombres,
-                'cantidades': barberos_cantidades
-            },
-            'clientes_top': clientes_top,
-            'resumen': {
-                'citas_mes_actual': citas_mes_actual,
-                'citas_totales': citas_totales,
-                'total_clientes': total_clientes,
-                'ingresos_totales': ingresos_totales
-            }
-        })
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-    
-# ========== ESTADISTICAS SIN LOGIN (TEMPORAL) ==========
-@admin_bp.route('/api/admin/estadisticas-test', methods=['GET'])
-def estadisticas_test():
-    """⚠️ TEMPORAL: Estadísticas sin login para pruebas."""
-    import os
-    token = request.args.get('token', '')
-    TOKEN_TEST = os.environ.get('RESET_TOKEN', 'reset2026temp')
-    if token != TOKEN_TEST:
-        return jsonify({'error': 'Token inválido'}), 403
-    # Reutilizar la lógica de estadísticas
-    try:
-        from datetime import datetime, timedelta
-        
-        conn = get_db()
-        cursor = conn.cursor()
-        hoy = ahora_ve()
-        
-        meses_es = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 
-                    'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
-        
-        citas_mes = []
-        ingresos_mes = []
-        etiquetas_mes = []
-        
-        for i in range(5, -1, -1):
-            mes_actual = hoy.month - i
-            anio_actual = hoy.year
-            while mes_actual <= 0:
-                mes_actual += 12
-                anio_actual -= 1
-            
-            primer_dia = f"{anio_actual}-{mes_actual:02d}-01"
-            if mes_actual == 12:
-                ultimo_dia = f"{anio_actual}-12-31"
-            else:
-                ultimo_dia = f"{anio_actual}-{mes_actual+1:02d}-01"
-            
-            cursor.execute('''
-                SELECT COUNT(*) as cnt 
-                FROM citas 
-                WHERE fecha >= %s AND fecha < %s
-                AND estado NOT IN ('cancelada_por_cliente', 'cancelada_por_barbero', 
-                                   'cancelada_por_sistema', 'expirada')
-            ''', (primer_dia, ultimo_dia))
+            ''' + filtro_barbero
+            cursor.execute(query_citas, (primer_dia, ultimo_dia) + tuple(params_barbero))
             citas_mes.append(cursor.fetchone()['cnt'])
             
-            cursor.execute('''
+            query_ingresos = '''
                 SELECT COALESCE(SUM(s.precio), 0) as total
                 FROM citas c
                 JOIN servicios s ON c.servicio_id = s.id
                 WHERE c.fecha >= %s AND c.fecha < %s
                 AND c.estado NOT IN ('cancelada_por_cliente', 'cancelada_por_barbero', 
                                      'cancelada_por_sistema', 'expirada')
-            ''', (primer_dia, ultimo_dia))
+            ''' + filtro_barbero
+            cursor.execute(query_ingresos, (primer_dia, ultimo_dia) + tuple(params_barbero))
             ingresos_mes.append(float(cursor.fetchone()['total']))
             etiquetas_mes.append(f"{meses_es[mes_actual-1]} {anio_actual}")
         
-        cursor.execute('''
-            SELECT b.nombre, COUNT(c.id) as total
-            FROM barberos b
-            LEFT JOIN citas c ON c.barbero_id = b.id
-            WHERE b.activo = 1
-            GROUP BY b.id, b.nombre
-            ORDER BY total DESC
-        ''')
+        # ========== 2. CITAS POR BARBERO ==========
+        if barbero_id > 0:
+            # Solo el barbero indicado
+            cursor.execute('''
+                SELECT b.nombre, COUNT(c.id) as total
+                FROM barberos b
+                LEFT JOIN citas c ON c.barbero_id = b.id
+                WHERE b.id = %s
+                GROUP BY b.id, b.nombre
+            ''', (barbero_id,))
+        else:
+            cursor.execute('''
+                SELECT b.nombre, COUNT(c.id) as total
+                FROM barberos b
+                LEFT JOIN citas c ON c.barbero_id = b.id
+                WHERE b.activo = 1
+                GROUP BY b.id, b.nombre
+                ORDER BY total DESC
+            ''')
         barberos_data = cursor.fetchall()
         
-        cursor.execute('''
+        # ========== 3. TOP 5 CLIENTES ==========
+        query_clientes = '''
             SELECT cl.nombre, cl.telefono, COUNT(c.id) as total_citas
             FROM clientes cl
             JOIN citas c ON c.cliente_id = cl.id
             WHERE c.estado NOT IN ('cancelada_por_cliente', 'cancelada_por_barbero', 
                                    'cancelada_por_sistema', 'expirada')
+        ''' + filtro_barbero + '''
             GROUP BY cl.id, cl.nombre, cl.telefono
             ORDER BY total_citas DESC
             LIMIT 5
-        ''')
+        '''
+        cursor.execute(query_clientes, tuple(params_barbero))
         clientes_top = [dict(c) for c in cursor.fetchall()]
         
+        # ========== 4. RESUMEN ==========
         primer_dia_mes = f"{hoy.year}-{hoy.month:02d}-01"
-        cursor.execute('''
-            SELECT COUNT(*) as cnt FROM citas 
-            WHERE fecha >= %s
-            AND estado NOT IN ('cancelada_por_cliente', 'cancelada_por_barbero', 
-                               'cancelada_por_sistema', 'expirada')
-        ''', (primer_dia_mes,))
+        query_resumen = '''
+            SELECT COUNT(*) as cnt FROM citas c
+            WHERE c.fecha >= %s
+            AND c.estado NOT IN ('cancelada_por_cliente', 'cancelada_por_barbero', 
+                                 'cancelada_por_sistema', 'expirada')
+        ''' + filtro_barbero
+        cursor.execute(query_resumen, (primer_dia_mes,) + tuple(params_barbero))
         citas_mes_actual = cursor.fetchone()['cnt']
         
-        cursor.execute('''
-            SELECT COUNT(*) as cnt FROM citas 
-            WHERE estado NOT IN ('cancelada_por_cliente', 'cancelada_por_barbero', 
-                                 'cancelada_por_sistema', 'expirada')
-        ''')
+        query_total = '''
+            SELECT COUNT(*) as cnt FROM citas c
+            WHERE c.estado NOT IN ('cancelada_por_cliente', 'cancelada_por_barbero', 
+                                   'cancelada_por_sistema', 'expirada')
+        '''
+        if barbero_id > 0:
+            query_total += ' AND c.barbero_id = %s'
+            cursor.execute(query_total, (barbero_id,))
+        else:
+            cursor.execute(query_total)
         citas_totales = cursor.fetchone()['cnt']
         
-        cursor.execute('SELECT COUNT(*) as cnt FROM clientes')
+        # Clientes únicos (que hayan tenido citas con este barbero, o todos si es admin)
+        if barbero_id > 0:
+            cursor.execute('''
+                SELECT COUNT(DISTINCT c.cliente_id) as cnt
+                FROM citas c WHERE c.barbero_id = %s
+            ''', (barbero_id,))
+        else:
+            cursor.execute('SELECT COUNT(*) as cnt FROM clientes')
         total_clientes = cursor.fetchone()['cnt']
         
-        cursor.execute('''
+        query_ing_total = '''
             SELECT COALESCE(SUM(s.precio), 0) as total
             FROM citas c
             JOIN servicios s ON c.servicio_id = s.id
             WHERE c.estado NOT IN ('cancelada_por_cliente', 'cancelada_por_barbero', 
                                    'cancelada_por_sistema', 'expirada')
-        ''')
+        ''' + filtro_barbero
+        cursor.execute(query_ing_total, tuple(params_barbero))
         ingresos_totales = float(cursor.fetchone()['total'])
         
         conn.close()
@@ -966,5 +853,107 @@ def estadisticas_test():
                 'ingresos_totales': ingresos_totales
             }
         })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    
+@admin_bp.route('/api/admin/estadisticas-detalle', methods=['GET'])
+def estadisticas_detalle():
+    """Detalle para el modal de estadísticas."""
+    user, error, code = requiere_autenticacion()
+    if error: return error, code
+    try:
+        tipo = request.args.get('tipo', '')  # citas_mes, ingresos, barberos, clientes
+        barbero_id = request.args.get('barbero_id', 0, type=int)
+        
+        if user['rol'] == 'barbero':
+            barbero_id = user['barbero_id']
+        
+        conn = get_db()
+        cursor = conn.cursor()
+        
+        resultado = {'titulo': '', 'items': []}
+        
+        filtro_barbero = ''
+        params_barbero = []
+        if barbero_id > 0:
+            filtro_barbero = ' AND c.barbero_id = %s'
+            params_barbero = [barbero_id]
+        
+        if tipo == 'citas_mes':
+            # Citas del mes actual
+            hoy = ahora_ve()
+            primer_dia = f"{hoy.year}-{hoy.month:02d}-01"
+            query = '''
+                SELECT c.fecha, c.hora_inicio, c.estado, 
+                       cl.nombre as cliente, cl.telefono,
+                       s.nombre as servicio, s.precio,
+                       b.nombre as barbero
+                FROM citas c
+                JOIN clientes cl ON c.cliente_id = cl.id
+                JOIN servicios s ON c.servicio_id = s.id
+                JOIN barberos b ON c.barbero_id = b.id
+                WHERE c.fecha >= %s
+                AND c.estado NOT IN ('cancelada_por_cliente', 'cancelada_por_barbero', 
+                                     'cancelada_por_sistema', 'expirada')
+            ''' + filtro_barbero + ' ORDER BY c.fecha DESC, c.hora_inicio DESC'
+            cursor.execute(query, (primer_dia,) + tuple(params_barbero))
+            resultado['titulo'] = f'Citas del mes actual ({hoy.strftime("%B %Y")})'
+            resultado['items'] = [dict(r) for r in cursor.fetchall()]
+        
+        elif tipo == 'citas_totales':
+            query = '''
+                SELECT c.fecha, c.hora_inicio, c.estado, 
+                       cl.nombre as cliente, cl.telefono,
+                       s.nombre as servicio, s.precio,
+                       b.nombre as barbero
+                FROM citas c
+                JOIN clientes cl ON c.cliente_id = cl.id
+                JOIN servicios s ON c.servicio_id = s.id
+                JOIN barberos b ON c.barbero_id = b.id
+                WHERE c.estado NOT IN ('cancelada_por_cliente', 'cancelada_por_barbero', 
+                                       'cancelada_por_sistema', 'expirada')
+            ''' + filtro_barbero + ' ORDER BY c.fecha DESC, c.hora_inicio DESC LIMIT 100'
+            cursor.execute(query, tuple(params_barbero))
+            resultado['titulo'] = 'Todas las citas (últimas 100)'
+            resultado['items'] = [dict(r) for r in cursor.fetchall()]
+        
+        elif tipo == 'clientes':
+            query = '''
+                SELECT cl.nombre, cl.telefono, cl.email,
+                       COUNT(c.id) as total_citas,
+                       COALESCE(SUM(s.precio), 0) as total_gastado
+                FROM clientes cl
+                JOIN citas c ON c.cliente_id = cl.id
+                JOIN servicios s ON c.servicio_id = s.id
+                WHERE c.estado NOT IN ('cancelada_por_cliente', 'cancelada_por_barbero', 
+                                       'cancelada_por_sistema', 'expirada')
+            ''' + filtro_barbero + '''
+                GROUP BY cl.id, cl.nombre, cl.telefono, cl.email
+                ORDER BY total_citas DESC
+            '''
+            cursor.execute(query, tuple(params_barbero))
+            resultado['titulo'] = 'Todos los clientes (por citas)'
+            resultado['items'] = [dict(r) for r in cursor.fetchall()]
+        
+        elif tipo == 'ingresos':
+            # Detalle de ingresos por servicio
+            query = '''
+                SELECT s.nombre as servicio,
+                       COUNT(c.id) as cantidad,
+                       SUM(s.precio) as total
+                FROM citas c
+                JOIN servicios s ON c.servicio_id = s.id
+                WHERE c.estado NOT IN ('cancelada_por_cliente', 'cancelada_por_barbero', 
+                                       'cancelada_por_sistema', 'expirada')
+            ''' + filtro_barbero + '''
+                GROUP BY s.id, s.nombre
+                ORDER BY total DESC
+            '''
+            cursor.execute(query, tuple(params_barbero))
+            resultado['titulo'] = 'Ingresos por servicio'
+            resultado['items'] = [dict(r) for r in cursor.fetchall()]
+        
+        conn.close()
+        return jsonify(resultado)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
