@@ -841,3 +841,30 @@ def estadisticas():
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+    
+# ========== RESET ADMIN (TEMPORAL) ==========
+@admin_bp.route('/api/admin/reset-admin', methods=['GET'])
+def reset_admin():
+    """⚠️ TEMPORAL: Resetea la contraseña del admin. Se eliminará después."""
+    import os
+    token = request.args.get('token', '')
+    TOKEN_RESET = os.environ.get('RESET_TOKEN', 'reset2026temp')
+    if token != TOKEN_RESET:
+        return jsonify({'error': 'Token inválido'}), 403
+    nueva = request.args.get('nueva', '')
+    if not nueva or len(nueva) < 6:
+        return jsonify({'error': 'Mínimo 6 caracteres'}), 400
+    try:
+        from werkzeug.security import generate_password_hash
+        conn = get_db()
+        cursor = conn.cursor()
+        pwd_hash = generate_password_hash(nueva)
+        cursor.execute("UPDATE usuarios SET password_hash = %s WHERE username = 'admin'", (pwd_hash,))
+        conn.commit()
+        conn.close()
+        return jsonify({
+            'mensaje': '✅ Contraseña del admin cambiada',
+            'nueva': nueva
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
