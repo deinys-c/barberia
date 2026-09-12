@@ -5,6 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gocho Barber - Reserva de Citas</title>
     <link rel="stylesheet" href="styles.css">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#c9a84c">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Gocho Barber">
+    <link rel="apple-touch-icon" href="imagenes/icon-192.png">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"></noscript>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
@@ -250,7 +256,7 @@
                     </div>
                     <div class="row">
                         <div><label>Nombre *</label><input type="text" id="itemNombre" maxlength="100"></div>
-                        <div><label>Precio</label><input type="text" id="itemPrecio" placeholder="$35.000 COP" maxlength="50"></div>
+                        <div><label>Precio</label><input type="text" id="itemPrecio" placeholder="35000 COP" maxlength="50"></div>
                     </div>
                     <label>Descripcion</label>
                     <input type="text" id="itemDescripcion" maxlength="200">
@@ -284,7 +290,7 @@
                         <div class="resumen-etiqueta">Clientes</div>
                     </div>
                     <div class="resumen-card clickeable" onclick="verDetalle('ingresos')">
-                        <div class="resumen-valor" id="statIngresos">$0</div>
+                        <div class="resumen-valor" id="statIngresos">0 COP</div>
                         <div class="resumen-etiqueta">Ingresos estimados</div>
                     </div>
                 </div>
@@ -327,7 +333,7 @@
                         <div class="resumen-etiqueta">Mis clientes</div>
                     </div>
                     <div class="resumen-card clickeable" onclick="verDetalle('ingresos')">
-                        <div class="resumen-valor" id="statMisIngresos">$0</div>
+                        <div class="resumen-valor" id="statMisIngresos">0 COP</div>
                         <div class="resumen-etiqueta">Mis ingresos estimados</div>
                     </div>
                 </div>
@@ -399,6 +405,17 @@
         </div>
     </div>
 </div>
+
+<script>
+    // Registrar Service Worker (PWA)
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('/service-worker.js')
+                .then((reg) => console.log('[PWA] Service Worker registrado', reg))
+                .catch((err) => console.log('[PWA] Error registrando SW', err));
+        });
+    }
+</script>
 
 <script src="script.js"></script>
 </body>

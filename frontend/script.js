@@ -312,7 +312,7 @@ async function alCambiarBarbero() {
         servicios.forEach(s => {
             const o = document.createElement('option');
             o.value = s.id;
-            o.textContent = `${s.nombre} (${s.duracion_minutos}min - $${Number(s.precio).toLocaleString('es-CO')} COP)`;
+            o.textContent = `${s.nombre} (${s.duracion_minutos}min - ${Number(s.precio).toLocaleString('es-CO')} COP)`;
             sel.appendChild(o);
         });
     } catch (e) {
@@ -899,7 +899,7 @@ async function cargarServiciosAdmin() {
             div.innerHTML = `
                 <div class="info">
                     <div class="fecha-hora">${escaparHTML(s.nombre)} ${!s.activo ? '<small style="color:#8a7a6a;">(Inactivo)</small>' : ''}</div>
-                    <div class="servicio">Duracion: ${s.duracion_minutos} min - Precio: $${Number(s.precio).toLocaleString('es-CO')} COP</div>
+                    <div class="servicio">Duracion: ${s.duracion_minutos} min - Precio: ${Number(s.precio).toLocaleString('es-CO')} COP</div>
                     ${s.descripcion ? `<div class="cliente">${escaparHTML(s.descripcion)}</div>` : ''}
                 </div>
                 <div class="acciones">
@@ -1171,7 +1171,7 @@ async function cargarEstadisticas() {
         document.getElementById('statCitasMes').textContent = data.resumen.citas_mes_actual;
         document.getElementById('statCitasTotal').textContent = data.resumen.citas_totales;
         document.getElementById('statClientes').textContent = data.resumen.total_clientes;
-        document.getElementById('statIngresos').textContent = '$' + Number(data.resumen.ingresos_totales).toLocaleString('es-CO');
+        document.getElementById('statIngresos').textContent = Number(data.resumen.ingresos_totales).toLocaleString('es-CO') + ' COP';
         
         dibujarGraficoBarras('graficoCitas', data.citas_mes.etiquetas, data.citas_mes.valores, 'Citas');
         dibujarGraficoLineas('graficoIngresos', data.ingresos_mes.etiquetas, data.ingresos_mes.valores);
@@ -1199,7 +1199,7 @@ async function cargarMisEstadisticas() {
         document.getElementById('statMisCitasMes').textContent = data.resumen.citas_mes_actual;
         document.getElementById('statMisCitasTotal').textContent = data.resumen.citas_totales;
         document.getElementById('statMisClientes').textContent = data.resumen.total_clientes;
-        document.getElementById('statMisIngresos').textContent = '$' + Number(data.resumen.ingresos_totales).toLocaleString('es-CO');
+        document.getElementById('statMisIngresos').textContent = Number(data.resumen.ingresos_totales).toLocaleString('es-CO') + ' COP';
         
         dibujarGraficoBarras('graficoMisCitas', data.citas_mes.etiquetas, data.citas_mes.valores, 'Citas');
         dibujarGraficoLineas('graficoMisIngresos', data.ingresos_mes.etiquetas, data.ingresos_mes.valores);
@@ -1268,7 +1268,7 @@ function dibujarGraficoLineas(id, etiquetas, valores) {
                     beginAtZero: true,
                     ticks: {
                         color: '#8a7a6a',
-                        callback: function(value) { return '$' + Number(value).toLocaleString('es-CO'); }
+                        callback: function(value) { return Number(value).toLocaleString('es-CO') + ' COP'; }
                     }
                 },
                 x: { ticks: { color: '#8a7a6a' } }
@@ -1363,12 +1363,12 @@ async function verDetalle(tipo) {
                     <td>${escaparHTML(it.hora_inicio || '')}</td>
                     <td>${escaparHTML(it.cliente || '')}</td>
                     <td>${escaparHTML(it.servicio || '')}</td>
-                    <td>$${Number(it.precio || 0).toLocaleString('es-CO')}</td>
+                    <td>${Number(it.precio || 0).toLocaleString('es-CO')} COP</td>
                     <td>${escaparHTML(it.barbero || '')}</td>
                 </tr>`;
                 total += Number(it.precio || 0);
             });
-            html += `<tr class="total-line"><td colspan="4"><strong>TOTAL</strong></td><td colspan="2"><strong>$${total.toLocaleString('es-CO')}</strong></td></tr>`;
+            html += `<tr class="total-line"><td colspan="4"><strong>TOTAL</strong></td><td colspan="2"><strong>${total.toLocaleString('es-CO')} COP</strong></td></tr>`;
         } else if (tipo === 'clientes') {
             html += '<th>Cliente</th><th>Teléfono</th><th>Citas</th><th>Total gastado</th>';
             html += '</tr></thead><tbody>';
@@ -1377,7 +1377,7 @@ async function verDetalle(tipo) {
                     <td>${escaparHTML(it.nombre || '')}</td>
                     <td>${escaparHTML(it.telefono || 'N/A')}</td>
                     <td>${it.total_citas}</td>
-                    <td>$${Number(it.total_gastado || 0).toLocaleString('es-CO')}</td>
+                    <td>${Number(it.total_gastado || 0).toLocaleString('es-CO')} COP</td>
                 </tr>`;
             });
         } else if (tipo === 'ingresos') {
@@ -1388,11 +1388,11 @@ async function verDetalle(tipo) {
                 html += `<tr>
                     <td>${escaparHTML(it.servicio || '')}</td>
                     <td>${it.cantidad}</td>
-                    <td>$${Number(it.total || 0).toLocaleString('es-CO')}</td>
+                    <td>${Number(it.total || 0).toLocaleString('es-CO')} COP</td>
                 </tr>`;
                 total += Number(it.total || 0);
             });
-            html += `<tr class="total-line"><td colspan="2"><strong>TOTAL</strong></td><td><strong>$${total.toLocaleString('es-CO')}</strong></td></tr>`;
+            html += `<tr class="total-line"><td colspan="2"><strong>TOTAL</strong></td><td><strong>${total.toLocaleString('es-CO')} COP</strong></td></tr>`;
         }
         
         html += '</tbody></table>';
