@@ -221,20 +221,30 @@ def reservar():
         ''', (barbero_id, cliente_id, servicio_id, fecha, hora_inicio, hora_fin,
               estado, tipo_reserva, alerta_cierre, notas))
         cita_id = cursor.fetchone()['id']
+
+        # Obtener chat_id del barbero para notificarle también a él
+        cursor.execute('SELECT telegram_chat_id FROM barberos WHERE id = %s', (barbero_id,))
+        b_row = cursor.fetchone()
+        barbero_telegram = b_row['telegram_chat_id'] if b_row else None
+
         conn.commit()
         conn.close()
 
         try:
             emoji = "⚠️ URGENTE" if tipo_reserva == 'urgente' else "✅ Confirmada"
-            enviar_telegram(
+            mensaje = (
                 f"🔔 <b>NUEVA CITA #{cita_id}</b>\n\n"
                 f"👤 {nombre}\n📱 {telefono or 'N/A'}\n"
                 f"✂️ {servicio_nombre}\n📅 {fecha}\n⏰ {hora_inicio}\n"
                 f"💈 {barbero_nombre}\n\n{emoji}"
             )
+            # Grupo admin (siempre)
+            enviar_telegram(mensaje)
+            # Al barbero (solo si tiene chat_id configurado)
+            if barbero_telegram:
+                enviar_telegram(mensaje, chat_id=barbero_telegram)
         except Exception as e:
-            pass
-
+            print(f"[NOTIF] Error notificando nueva cita: {e}")
         if tipo_reserva == 'urgente':
             return jsonify({'mensaje': 'Solicitud urgente enviada', 'citaId': cita_id, 'estado': 'pendiente_confirmacion'})
         else:

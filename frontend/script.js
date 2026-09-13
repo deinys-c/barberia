@@ -681,6 +681,7 @@ function abrirFormBarbero() {
     document.getElementById('barberoNombre').value = '';
     document.getElementById('barberoTelefono').value = '';
     document.getElementById('barberoEmail').value = '';
+    document.getElementById('barberoTelegramChatId').value = '';
     document.getElementById('barberoHoraInicio').value = '08:00';
     document.getElementById('barberoHoraFin').value = '17:00';
     document.getElementById('barberoConPausa').value = 'no';
@@ -705,6 +706,7 @@ async function guardarBarbero() {
         nombre,
         telefono: document.getElementById('barberoTelefono').value.trim(),
         email: document.getElementById('barberoEmail').value.trim(),
+        telegram_chat_id: document.getElementById('barberoTelegramChatId').value.trim(),
         hora_inicio: document.getElementById('barberoHoraInicio').value,
         hora_fin: document.getElementById('barberoHoraFin').value,
         pausa_inicio: conPausa ? document.getElementById('barberoPausaInicio').value : null,
@@ -767,6 +769,7 @@ async function cargarBarberos() {
                 <div class="info">
                     <div class="fecha-hora">${escaparHTML(b.nombre)} ${!b.activo ? '<small style="color:#8a7a6a;">(Inactivo)</small>' : ''}</div>
                     <div class="cliente">${escaparHTML(b.telefono || 'Sin tel')} - ${escaparHTML(b.email || 'Sin email')}</div>
+                    <div class="cliente">Telegram: ${b.telegram_chat_id ? escaparHTML(b.telegram_chat_id) : '<em style="color:#8a7a6a;">No configurado</em>'}</div>
                     <div class="barbero-info">Horario: ${horario}${pausa} | Estado: ${b.activo ? 'Activo' : 'Inactivo'}</div>
                 </div>
                 <div class="acciones">${botones}</div>
@@ -786,6 +789,7 @@ async function editarBarbero(id) {
         document.getElementById('barberoNombre').value = b.nombre || '';
         document.getElementById('barberoTelefono').value = b.telefono || '';
         document.getElementById('barberoEmail').value = b.email || '';
+        document.getElementById('barberoTelegramChatId').value = b.telegram_chat_id || '';
         document.getElementById('barberoHoraInicio').value = b.hora_inicio || '08:00';
         document.getElementById('barberoHoraFin').value = b.hora_fin || '17:00';
         if (b.pausa_inicio && b.pausa_fin) {

@@ -61,6 +61,9 @@ def agregar_columnas_faltantes(cursor):
     if not columna_existe(cursor, 'barberos', 'hora_fin'):
         print("🔧 Migrando: añadiendo barberos.hora_fin")
         cursor.execute("ALTER TABLE barberos ADD COLUMN hora_fin TEXT DEFAULT '17:00'")
+    if not columna_existe(cursor, 'barberos', 'telegram_chat_id'):
+        print("🔧 Migrando: añadiendo barberos.telegram_chat_id")
+        cursor.execute("ALTER TABLE barberos ADD COLUMN telegram_chat_id TEXT")
 
 def init_db():
     conn = get_db()
@@ -75,6 +78,7 @@ def init_db():
             nombre TEXT NOT NULL,
             telefono TEXT,
             email TEXT,
+            telegram_chat_id TEXT,
             hora_inicio TEXT DEFAULT '08:00',
             hora_fin TEXT DEFAULT '17:00',
             dias_trabajo TEXT DEFAULT '["lunes","martes","miercoles","jueves","viernes","sabado"]',

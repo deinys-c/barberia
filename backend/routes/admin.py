@@ -47,11 +47,12 @@ def crear_barbero():
         pausa_inicio = data.get('pausa_inicio') or None
         pausa_fin = data.get('pausa_fin') or None
         
+        telegram_chat_id = (data.get('telegram_chat_id') or '').strip() or None
         cursor.execute('''
-            INSERT INTO barberos (nombre, telefono, email, hora_inicio, hora_fin, pausa_inicio, pausa_fin, dias_trabajo)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id
+            INSERT INTO barberos (nombre, telefono, email, telegram_chat_id, hora_inicio, hora_fin, pausa_inicio, pausa_fin, dias_trabajo)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id
         ''', (data['nombre'].strip(), data.get('telefono', '').strip(),
-              data.get('email', '').strip(), hora_inicio, hora_fin,
+              data.get('email', '').strip(), telegram_chat_id, hora_inicio, hora_fin,
               pausa_inicio, pausa_fin, json.dumps(dias)))
         nuevo_id = cursor.fetchone()['id']
         
@@ -119,6 +120,10 @@ def actualizar_barbero(barbero_id):
             campos.append('telefono = %s'); valores.append(data['telefono'].strip())
         if 'email' in data:
             campos.append('email = %s'); valores.append(data['email'].strip())
+        if 'telegram_chat_id' in data:
+            campos.append('telegram_chat_id = %s')
+            tg = (data['telegram_chat_id'] or '').strip()
+            valores.append(tg if tg else None)
         if 'hora_inicio' in data:
             campos.append('hora_inicio = %s'); valores.append(data['hora_inicio'])
         if 'hora_fin' in data:

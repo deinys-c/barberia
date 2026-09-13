@@ -345,7 +345,7 @@ def cancelar_cita_cliente():
     try:
         conn = get_db()
         cursor = conn.cursor()
-        cursor.execute('SELECT estado, fecha FROM citas WHERE id = %s', (cita_id,))
+        cursor.execute('SELECT estado, fecha, barbero_id FROM citas WHERE id = %s', (cita_id,))
         cita = cursor.fetchone()
         if not cita:
             conn.close()
@@ -356,10 +356,18 @@ def cancelar_cita_cliente():
         if cita['fecha'] < ahora_ve().strftime('%Y-%m-%d'):
             conn.close()
             return jsonify({'error': 'Es del pasado'}), 400
+        cursor.execute('SELECT telegram_chat_id FROM barberos WHERE id = %s', (cita['barbero_id'],))
+        b_row = cursor.fetchone()
+        barbero_telegram = b_row['telegram_chat_id'] if b_row else None
+
         cursor.execute("UPDATE citas SET estado = 'cancelada_por_cliente' WHERE id = %s", (cita_id,))
         conn.commit()
         conn.close()
-        enviar_telegram(f"❌ Cita #{cita_id} cancelada por el cliente")
+
+        mensaje = f"❌ Cita #{cita_id} cancelada por el cliente"
+        enviar_telegram(mensaje)
+        if barbero_telegram:
+            enviar_telegram(mensaje, chat_id=barbero_telegram)
         return jsonify({'mensaje': 'Cancelada'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -415,10 +423,18 @@ def solicitar_modificacion():
               nueva_fecha, nueva_hora, nueva_hora_fin,
               1 if total_min > 17*60 else 0, cita_original_id, original['notas_cliente']))
         nueva_cita_id = cursor.fetchone()['id']
+
+        cursor.execute('SELECT telegram_chat_id FROM barberos WHERE id = %s', (original['barbero_id'],))
+        b_row = cursor.fetchone()
+        barbero_telegram = b_row['telegram_chat_id'] if b_row else None
+
         conn.commit()
         conn.close()
 
-        enviar_telegram(f"🔄 Modificación cita #{cita_original_id} → {nueva_fecha} {nueva_hora}")
+        mensaje = f"🔄 Modificación cita #{cita_original_id} → {nueva_fecha} {nueva_hora}"
+        enviar_telegram(mensaje)
+        if barbero_telegram:
+            enviar_telegram(mensaje, chat_id=barbero_telegram)
         return jsonify({'mensaje': 'Solicitud enviada', 'nueva_cita_id': nueva_cita_id})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
