@@ -1,25 +1,20 @@
 {
-    "name": "Gocho Barber - Reserva de Citas",
+    "name": "Gocho Barber",
     "short_name": "Gocho Barber",
-    "description": "Sistema de reserva de citas para barbería",
     "start_url": "/",
     "display": "standalone",
-    "orientation": "portrait",
     "background_color": "#1a1410",
     "theme_color": "#c9a84c",
-    "lang": "es",
     "icons": [
         {
             "src": "/imagenes/icon-192.png",
             "sizes": "192x192",
-            "type": "image/png",
-            "purpose": "any maskable"
+            "type": "image/png"
         },
         {
             "src": "/imagenes/icon-512.png",
             "sizes": "512x512",
-            "type": "image/png",
-            "purpose": "any maskable"
+            "type": "image/png"
         }
     ]
 }
