@@ -49,18 +49,47 @@ def historial_citas():
         actualizar_citas_pasadas()
         conn = get_db()
         cursor = conn.cursor()
+        
+        barbero_id = request.args.get('barbero_id', 0, type=int)
+        fecha_desde = request.args.get('fecha_desde', '')
+        fecha_hasta = request.args.get('fecha_hasta', '')
+        estado = request.args.get('estado', '')
+        busqueda = request.args.get('busqueda', '').strip()
+        
         query = '''
             SELECT c.id, c.fecha, c.hora_inicio, c.estado, c.tipo_reserva,
-                   cl.nombre as cliente, s.nombre as servicio, b.nombre as barbero
+                   cl.nombre as cliente, cl.telefono as cliente_telefono,
+                   s.nombre as servicio, b.nombre as barbero
             FROM citas c
             JOIN clientes cl ON c.cliente_id = cl.id
             JOIN servicios s ON c.servicio_id = s.id
             JOIN barberos b ON c.barbero_id = b.id
+            WHERE 1=1
         '''
         params = []
+        
+        # Filtro por barbero (admin puede filtrar, barbero solo ve los suyos)
         if user['rol'] == 'barbero' and user['barbero_id']:
-            query += ' WHERE c.barbero_id = %s'
+            query += ' AND c.barbero_id = %s'
             params.append(user['barbero_id'])
+        elif barbero_id > 0:
+            query += ' AND c.barbero_id = %s'
+            params.append(barbero_id)
+        
+        if fecha_desde:
+            query += ' AND c.fecha >= %s'
+            params.append(fecha_desde)
+        if fecha_hasta:
+            query += ' AND c.fecha <= %s'
+            params.append(fecha_hasta)
+        if estado:
+            query += ' AND c.estado = %s'
+            params.append(estado)
+        if busqueda:
+            query += ' AND (cl.nombre ILIKE %s OR cl.telefono ILIKE %s)'
+            params.append(f'%{busqueda}%')
+            params.append(f'%{busqueda}%')
+        
         query += ' ORDER BY c.fecha DESC, c.hora_inicio DESC LIMIT 200'
         cursor.execute(query, params)
         citas = cursor.fetchall()
