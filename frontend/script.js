@@ -274,9 +274,10 @@ function cambiarTabBarbero(tab) {
         cargarMisEstadisticas();
     }
     else if (tab === 'configuracion') {
-        activar(idxConfig); document.getElementById('tabConfiguracion').style.display = 'block';
-        cargarBarberosSelectorAdmin();
-    }
+    activar(idxConfig); document.getElementById('tabConfiguracion').style.display = 'block';
+    cargarBarberosSelectorAdmin();
+    actualizarBotonInstalar();
+}
 }
 
 // ===== RESERVAR =====
@@ -1482,6 +1483,156 @@ function avisarPorWhatsApp(nombre, telefono, fecha, hora, accion) {
     const mensajeCod = encodeURIComponent(mensaje);
     window.open(`https://wa.me/${numero}?text=${mensajeCod}`, '_blank');
 }
+
+// ===== INSTALAR PWA (con contraseña) =====
+let deferredPrompt = null;
+let yaInstalada = false;
+
+// Detectar si la app ya está instalada
+if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true) {
+    yaInstalada = true;
+}
+
+// Capturar el evento de instalación (solo en Chrome/Edge/Brave/Opera)
+window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    actualizarBotonInstalar();
+});
+
+// Detectar cuando se instala
+window.addEventListener('appinstalled', () => {
+    yaInstalada = true;
+    actualizarBotonInstalar();
+    mostrarToast('Aplicacion instalada correctamente', 'exito');
+});
+
+// Detectar tipo de dispositivo/navegador
+function esIphone() {
+    return /iPhone|iPad|iPod/.test(navigator.userAgent) && !window.MSStream;
+}
+
+function esFirefox() {
+    return /Firefox/.test(navigator.userAgent);
+}
+
+function esSafariMovil() {
+    return esIphone() && /Safari/.test(navigator.userAgent) && !/CriOS|FxiOS/.test(navigator.userAgent);
+}
+
+// Mostrar u ocultar el botón según el estado
+function actualizarBotonInstalar() {
+    const bloque = document.getElementById('bloqueInstalar');
+    if (!bloque) return;
+    if (yaInstalada) {
+        bloque.style.display = 'none';
+    } else {
+        bloque.style.display = 'block';
+    }
+}
+
+// Abrir modal de instalar
+function abrirModalInstalar() {
+    document.getElementById('passwordInstalar').value = '';
+    const msg = document.getElementById('mensajeInstalar');
+    msg.style.display = 'none';
+    msg.textContent = '';
+    document.getElementById('modal-instalar').classList.add('activo');
+    setTimeout(() => document.getElementById('passwordInstalar').focus(), 100);
+}
+
+// Cerrar modal de instalar
+function cerrarModalInstalar() {
+    document.getElementById('modal-instalar').classList.remove('activo');
+}
+
+// Verificar contraseña y ejecutar instalación
+async function verificarEInstalar() {
+    const password = document.getElementById('passwordInstalar').value;
+    const msg = document.getElementById('mensajeInstalar');
+    
+    if (!password) {
+        msg.className = 'mensaje error';
+        msg.textContent = 'Ingresa la contraseña del admin';
+        msg.style.display = 'block';
+        return;
+    }
+    
+    // Verificar contra el backend
+    try {
+        const res = await fetch(`${API_URL}/api/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: 'admin', password })
+        });
+        
+        if (!res.ok) {
+            msg.className = 'mensaje error';
+            msg.textContent = 'Contrasena incorrecta';
+            msg.style.display = 'block';
+            return;
+        }
+        
+        // Contraseña correcta → proceder con la instalación
+        cerrarModalInstalar();
+        
+        // Caso 1: Firefox (no soporta PWA)
+        if (esFirefox()) {
+            setTimeout(() => {
+                mostrarToast('Firefox no soporta instalar apps. Usa Chrome o Edge.', 'error', 6000);
+            }, 300);
+            return;
+        }
+        
+        // Caso 2: iPhone (mostrar instrucciones)
+        if (esIphone()) {
+            setTimeout(() => {
+                document.getElementById('modal-instrucciones-iphone').classList.add('activo');
+            }, 300);
+            return;
+        }
+        
+        // Caso 3: Chrome/Edge/Android con prompt disponible
+        if (deferredPrompt) {
+            setTimeout(async () => {
+                deferredPrompt.prompt();
+                const { outcome } = await deferredPrompt.userChoice;
+                if (outcome === 'accepted') {
+                    mostrarToast('Instalando aplicacion...', 'exito');
+                } else {
+                    mostrarToast('Instalacion cancelada', 'info');
+                }
+                deferredPrompt = null;
+            }, 300);
+            return;
+        }
+        
+        // Caso 4: Ya instalada o no hay prompt (raro)
+        setTimeout(() => {
+            if (yaInstalada) {
+                mostrarToast('La aplicacion ya esta instalada', 'info');
+            } else {
+                mostrarToast('Tu navegador no soporta instalar apps. Usa Chrome, Edge o Brave.', 'error', 6000);
+            }
+        }, 300);
+        
+    } catch (e) {
+        msg.className = 'mensaje error';
+        msg.textContent = 'Error al conectar con el servidor';
+        msg.style.display = 'block';
+    }
+}
+
+// Cerrar modal de instrucciones iPhone
+function cerrarModalInstrucciones() {
+    document.getElementById('modal-instrucciones-iphone').classList.remove('activo');
+}
+
+// Exponer al global
+window.abrirModalInstalar = abrirModalInstalar;
+window.cerrarModalInstalar = cerrarModalInstalar;
+window.verificarEInstalar = verificarEInstalar;
+window.cerrarModalInstrucciones = cerrarModalInstrucciones;
 
 // ===== INICIALIZACIÓN =====
 document.addEventListener('DOMContentLoaded', function() {

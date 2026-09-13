@@ -361,6 +361,14 @@
             <!-- CONFIGURACION -->
             <div id="tabConfiguracion" class="panel-tab" style="display:none;">
                 <h3>Configuracion</h3>
+
+                <!-- Bloque instalar app (se muestra solo si no está instalada) -->
+                <div id="bloqueInstalar" style="background:rgba(201,168,76,0.1); padding:20px; border-radius:8px; margin-bottom:15px; display:none; border:1px solid rgba(201,168,76,0.3);">
+                    <h4 style="color:#f0d5a8; margin-bottom:10px; font-weight:400;"><i class="fa-solid fa-mobile-screen-button"></i> Instalar aplicacion</h4>
+                    <p style="color:#8a7a6a; font-size:0.9rem; margin-bottom:15px;">Instala Gocho Barber en tu movil para acceso rapido</p>
+                    <button class="btn" onclick="abrirModalInstalar()"><i class="fa-solid fa-download"></i> Instalar app</button>
+                </div>
+
                 <div style="background:rgba(255,255,255,0.03); padding:20px; border-radius:8px;">
                     <label>Bloquear dia</label>
                     <div class="row" id="filaSelectorBloqueo">
@@ -402,6 +410,37 @@
         <div id="detalle-contenido" class="detalle-contenido"></div>
         <div class="modal-botones">
             <button class="btn" onclick="cerrarModalDetalle()">Cerrar</button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de instalar app -->
+<div id="modal-instalar" class="modal-overlay">
+    <div class="modal-box">
+        <h3>Instalar Gocho Barber</h3>
+        <p>Ingresa la contrasena del admin para instalar la aplicacion:</p>
+        <input type="password" id="passwordInstalar" placeholder="Contrasena del admin" maxlength="50" onkeydown="if(event.key==='Enter') verificarEInstalar()">
+        <div id="mensajeInstalar" class="mensaje"></div>
+        <div class="modal-botones">
+            <button class="btn btn-secundario" onclick="cerrarModalInstalar()">Cancelar</button>
+            <button class="btn" onclick="verificarEInstalar()"><i class="fa-solid fa-download"></i> Instalar</button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de instrucciones para iPhone -->
+<div id="modal-instrucciones-iphone" class="modal-overlay">
+    <div class="modal-box">
+        <h3>Instalar en iPhone</h3>
+        <p style="color: #8a7a6a; font-size: 0.9rem;">Sigue estos pasos en Safari:</p>
+        <ol style="color: #f0d5a8; padding-left: 25px; line-height: 2; margin: 15px 0;">
+            <li>Toca el boton <strong>Compartir</strong> (cuadrado con flecha hacia arriba) en la parte inferior</li>
+            <li>Desplazate y toca <strong>"Anadir a pantalla de inicio"</strong></li>
+            <li>Toca <strong>"Anadir"</strong> en la esquina superior derecha</li>
+            <li>Busca el icono <strong>GB</strong> en tu pantalla de inicio</li>
+        </ol>
+        <div class="modal-botones">
+            <button class="btn" onclick="cerrarModalInstrucciones()">Entendido</button>
         </div>
     </div>
 </div>
