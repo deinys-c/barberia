@@ -467,3 +467,71 @@ body.modo-claro .detalle-contenido th { background: #e8d0a8; color: #2c1a12; }
 body.modo-claro .detalle-contenido td { color: #2c1a12; border-bottom-color: rgba(106, 74, 42, 0.15); }
 body.modo-claro .detalle-contenido tr:hover td { background: #faf5ea; }
 body.modo-claro .detalle-contenido .total-line { background: #e8d0a8; color: #6a4a2a; }
+
+/* ===== AUTOCOMPLETADO CLIENTES ===== */
+.sugerencias-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: #1a1410;
+    border: 1px solid #c9a84c;
+    border-top: none;
+    border-radius: 0 0 8px 8px;
+    max-height: 220px;
+    overflow-y: auto;
+    z-index: 1000;
+    box-shadow: 0 8px 20px rgba(0,0,0,0.6);
+}
+.sugerencia-item {
+    padding: 12px 15px;
+    cursor: pointer;
+    color: #f0d5a8;
+    border-bottom: 1px solid rgba(201, 168, 76, 0.1);
+    transition: 0.2s;
+    font-size: 0.95rem;
+}
+.sugerencia-item:hover {
+    background: rgba(201, 168, 76, 0.2);
+}
+.sugerencia-item:last-child {
+    border-bottom: none;
+}
+.sugerencia-item .tel {
+    color: #8a7a6a;
+    font-size: 0.85rem;
+    margin-left: 10px;
+}
+
+/* Modo claro */
+body.modo-claro .sugerencias-dropdown {
+    background: #ffffff;
+    border-color: #6a4a2a;
+}
+body.modo-claro .sugerencia-item {
+    color: #2c1a12;
+    border-bottom-color: rgba(106, 74, 42, 0.15);
+}
+body.modo-claro .sugerencia-item:hover {
+    background: #e8d0a8;
+}
+body.modo-claro .sugerencia-item .tel {
+    color: #6a4a2a;
+}
+
+/* ===== VALIDACION EN TIEMPO REAL ===== */
+input.campo-valido {
+    border-color: #2a7a4a !important;
+    box-shadow: 0 0 10px rgba(42, 122, 74, 0.2) !important;
+}
+input.campo-invalido {
+    border-color: #8b2a2a !important;
+    box-shadow: 0 0 10px rgba(139, 42, 42, 0.2) !important;
+}
+.mensaje-validacion {
+    font-size: 0.8rem;
+    margin-top: 4px;
+    display: none;
+}
+.mensaje-validacion.error { color: #d97a7a; display: block; }
+.mensaje-validacion.exito { color: #7ac99a; display: block; }

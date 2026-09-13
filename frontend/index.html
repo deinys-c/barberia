@@ -71,7 +71,11 @@
 
             <div id="formReserva" style="display:none; margin-top:20px; border-top: 1px solid rgba(201,168,76,0.15); padding-top:20px;">
                 <div class="row">
-                    <div><label>Nombre completo *</label><input type="text" id="nombre" placeholder="Tu nombre" maxlength="50"></div>
+                    <div style="position:relative;">
+                        <label>Nombre completo *</label>
+                        <input type="text" id="nombre" placeholder="Tu nombre" maxlength="50" oninput="buscarClientesNombre()" onfocus="buscarClientesNombre()" autocomplete="off">
+                        <div id="sugerenciasClientes" class="sugerencias-dropdown" style="display:none;"></div>
+                    </div>
                     <div><label>Telefono (recomendado)</label><input type="text" id="telefono" placeholder="0414-1234567" maxlength="20"></div>
                 </div>
                 <label>Notas (opcional)</label>
@@ -418,7 +422,7 @@
 <!-- Toasts -->
 <div id="toast-container"></div>
 
-<!-- Modal -->
+<!-- Modal de confirmación general -->
 <div id="modal-overlay" class="modal-overlay">
     <div class="modal-box">
         <h3 id="modal-titulo">Confirmar</h3>

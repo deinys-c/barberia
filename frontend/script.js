@@ -361,7 +361,8 @@ async function reservar() {
     const nombre = document.getElementById('nombre').value.trim();
     const telefono = document.getElementById('telefono').value.trim();
     const notas = document.getElementById('notas').value.trim();
-    if (!nombre) { mostrarToast('Nombre obligatorio', 'error'); return; }
+    if (!validarNombre()) { mostrarToast('El nombre debe tener al menos 2 caracteres', 'error'); return; }
+    if (!validarTelefono()) { mostrarToast('El teléfono debe tener al menos 7 dígitos', 'error'); return; }
     if (!horaSeleccionada) { mostrarToast('Selecciona hora', 'error'); return; }
     if (!servicio) { mostrarToast('Selecciona servicio', 'error'); return; }
     const msg = document.getElementById('mensajeReserva');
@@ -1661,6 +1662,158 @@ function limpiarFiltrosHistorial() {
     if (selB) selB.value = '0';
     cargarHistorial();
 }
+
+// ===== AUTOCOMPLETADO DE CLIENTES =====
+let timeoutBusquedaClientes = null;
+let sugerenciasActuales = [];
+
+function buscarClientesNombre() {
+    clearTimeout(timeoutBusquedaClientes);
+    const q = document.getElementById('nombre')?.value.trim() || '';
+    const dropdown = document.getElementById('sugerenciasClientes');
+    if (!dropdown) return;
+    
+    if (q.length < 2) {
+        dropdown.style.display = 'none';
+        dropdown.innerHTML = '';
+        return;
+    }
+    
+    timeoutBusquedaClientes = setTimeout(async () => {
+        try {
+            const res = await fetch(`${API_URL}/api/clientes/buscar?q=${encodeURIComponent(q)}`);
+            const clientes = await res.json();
+            if (!clientes || !clientes.length) {
+                dropdown.style.display = 'none';
+                return;
+            }
+            sugerenciasActuales = clientes;
+            dropdown.innerHTML = clientes.map((c, i) => `
+                <div class="sugerencia-item" onclick="seleccionarCliente(${i})">
+                    <strong>${escaparHTML(c.nombre)}</strong>
+                    <span class="tel">${escaparHTML(c.telefono || '')}</span>
+                </div>
+            `).join('');
+            dropdown.style.display = 'block';
+        } catch (e) {
+            dropdown.style.display = 'none';
+        }
+    }, 300);
+}
+
+function seleccionarCliente(index) {
+    const c = sugerenciasActuales[index];
+    if (!c) return;
+    document.getElementById('nombre').value = c.nombre || '';
+    document.getElementById('telefono').value = c.telefono || '';
+    document.getElementById('sugerenciasClientes').style.display = 'none';
+    validarNombre();
+    validarTelefono();
+}
+
+// Cerrar dropdown al hacer clic fuera
+document.addEventListener('click', (e) => {
+    const dropdown = document.getElementById('sugerenciasClientes');
+    const input = document.getElementById('nombre');
+    if (dropdown && input && !input.contains(e.target) && !dropdown.contains(e.target)) {
+        dropdown.style.display = 'none';
+    }
+});
+
+// ===== VALIDACION EN TIEMPO REAL =====
+function validarNombre() {
+    const input = document.getElementById('nombre');
+    if (!input) return true;
+    const val = input.value.trim();
+    if (val.length === 0) {
+        input.classList.remove('campo-valido', 'campo-invalido');
+        return false;
+    }
+    if (val.length < 2) {
+        input.classList.remove('campo-valido');
+        input.classList.add('campo-invalido');
+        return false;
+    }
+    input.classList.remove('campo-invalido');
+    input.classList.add('campo-valido');
+    return true;
+}
+
+function validarTelefono() {
+    const input = document.getElementById('telefono');
+    if (!input) return true;
+    const val = input.value.trim();
+    if (val.length === 0) {
+        input.classList.remove('campo-valido', 'campo-invalido');
+        return true; // teléfono es opcional
+    }
+    const soloDigitos = val.replace(/\D/g, '');
+    if (soloDigitos.length < 7) {
+        input.classList.remove('campo-valido');
+        input.classList.add('campo-invalido');
+        return false;
+    }
+    input.classList.remove('campo-invalido');
+    input.classList.add('campo-valido');
+    return true;
+}
+
+// ===== ATAJOS DE TECLADO =====
+document.addEventListener('keydown', (e) => {
+    // ESC: cerrar cualquier modal activo
+    if (e.key === 'Escape') {
+        const modales = ['modal-overlay', 'modal-detalle', 'modal-instalar', 'modal-instrucciones-iphone'];
+        modales.forEach(id => {
+            const m = document.getElementById(id);
+            if (m && m.classList.contains('activo')) {
+                m.classList.remove('activo');
+                // Si es el de confirmación, resolver como "false"
+                if (id === 'modal-overlay' && modalResolve) {
+                    modalResolve(false);
+                    modalResolve = null;
+                }
+            }
+        });
+        // Cerrar dropdown de sugerencias
+        const dd = document.getElementById('sugerenciasClientes');
+        if (dd) dd.style.display = 'none';
+    }
+    
+    // Enter: aceptar modal de confirmación
+    if (e.key === 'Enter') {
+        const modal = document.getElementById('modal-overlay');
+        if (modal && modal.classList.contains('activo') && modalResolve) {
+            // No disparar si el foco está en un input/textarea
+            const tag = document.activeElement?.tagName;
+            if (tag !== 'INPUT' && tag !== 'TEXTAREA') {
+                e.preventDefault();
+                modalResolve(true);
+                modalResolve = null;
+                modal.classList.remove('activo');
+            }
+        }
+    }
+});
+
+// Exponer al global
+window.buscarClientesNombre = buscarClientesNombre;
+window.seleccionarCliente = seleccionarCliente;
+window.validarNombre = validarNombre;
+window.validarTelefono = validarTelefono;
+
+// Conectar validación a los inputs
+document.addEventListener('DOMContentLoaded', () => {
+    const inputNombre = document.getElementById('nombre');
+    const inputTel = document.getElementById('telefono');
+    if (inputNombre) {
+        inputNombre.addEventListener('blur', validarNombre);
+        inputNombre.addEventListener('input', validarNombre);
+    }
+    if (inputTel) {
+        inputTel.addEventListener('blur', validarTelefono);
+        inputTel.addEventListener('input', validarTelefono);
+    }
+});
 
 // ===== INICIALIZACIÓN =====
 document.addEventListener('DOMContentLoaded', function() {
