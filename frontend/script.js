@@ -32,6 +32,36 @@ function fechaVE(diasAdelante = 0) {
     return ahoraVE.toISOString().split('T')[0];
 }
 
+// ===== MANEJO CENTRALIZADO DE ERRORES =====
+function logError(contexto, detalle) {
+    console.error(`[${contexto}]`, detalle);
+}
+
+function extraerMensaje(data, res) {
+    if (data && data.mensaje) return data.mensaje;
+    if (data && data.error) return data.error;
+    if (res && res.status) return `HTTP ${res.status}`;
+    return 'Error desconocido';
+}
+
+function manejarErrorCatch(e, contexto) {
+    console.error(`[${contexto}] Excepción:`, e);
+    if (!navigator.onLine) {
+        mostrarToast('Sin conexión a internet', 'error', 5000);
+        return;
+    }
+    const msg = (e && e.message) ? e.message : 'Error al conectar';
+    mostrarToast(`${contexto}: ${msg}`, 'error', 5000);
+}
+
+// Capturar errores no manejados a nivel global
+window.addEventListener('unhandledrejection', (event) => {
+    console.error('[Promesa no manejada]', event.reason);
+});
+window.addEventListener('error', (event) => {
+    console.error('[Error global]', event.message, event.filename, event.lineno);
+});
+
 // ===== CATALOGO (Productos y Estilos) =====
 async function cargarProductos() {
     const contenedor = document.getElementById('productosContainer');
@@ -56,6 +86,7 @@ async function cargarProductos() {
             contenedor.appendChild(card);
         });
     } catch (error) {
+        logError('Cargar productos', error);
         contenedor.innerHTML = '<div class="sin-huecos">Error al cargar.</div>';
     }
 }
@@ -81,6 +112,7 @@ async function cargarEstilos() {
             contenedor.appendChild(card);
         });
     } catch (error) {
+        logError('Cargar estilos', error);
         contenedor.innerHTML = '<div class="sin-huecos">Error al cargar.</div>';
     }
 }
@@ -169,6 +201,7 @@ async function loginUsuario() {
             msg.textContent = data.error || 'Error';
         }
     } catch (error) {
+        logError('Login', error);
         msg.className = 'mensaje error';
         msg.textContent = 'Error al conectar.';
     }
@@ -293,7 +326,9 @@ async function cargarBarberosCliente() {
             sel.appendChild(o);
         });
         await alCambiarBarbero();
-    } catch (e) {}
+    } catch (e) {
+        logError('Cargar barberos cliente', e);
+    }
 }
 
 async function alCambiarBarbero() {
@@ -316,6 +351,7 @@ async function alCambiarBarbero() {
             sel.appendChild(o);
         });
     } catch (e) {
+        logError('Cargar servicios', e);
         sel.innerHTML = '<option value="">Error al cargar</option>';
     }
 }
@@ -330,7 +366,7 @@ async function cargarHuecos() {
     c.innerHTML = '<div class="sin-huecos">Cargando...</div>';
     try {
         const res = await fetch(`${API_URL}/api/disponibilidad?fecha=${encodeURIComponent(fecha)}&barbero_id=${barberoId}&servicio_id=${servicioId}`);
-        if (!res.ok) throw new Error();
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         c.innerHTML = '';
         if (data.disponibles && data.disponibles.length > 0) {
@@ -350,6 +386,7 @@ async function cargarHuecos() {
             c.innerHTML = '<div class="sin-huecos">No hay horas disponibles.</div>';
         }
     } catch (e) {
+        logError('Cargar huecos', e);
         c.innerHTML = '<div class="sin-huecos">Error al cargar.</div>';
     }
 }
@@ -391,6 +428,7 @@ async function reservar() {
         const data = await res.json();
         msg.className = 'mensaje ' + (res.ok ? 'exito' : 'error');
         msg.textContent = data.mensaje || data.error || 'Error';
+        if (!res.ok) logError('Reservar (servidor)', { status: res.status, data });
         if (res.ok) {
             document.getElementById('formReserva').style.display = 'none';
             document.getElementById('huecos').innerHTML = '';
@@ -402,8 +440,9 @@ async function reservar() {
             horaSeleccionada = null;
         }
     } catch (e) {
+        manejarErrorCatch(e, 'Reservar');
         msg.className = 'mensaje error';
-        msg.textContent = 'Error al conectar.';
+        msg.textContent = 'Error al conectar. Revisa la consola (F12) para más detalle.';
     } finally {
         reservandoEnProceso = false;
     }
@@ -470,7 +509,10 @@ async function consultarCitas() {
             `;
             c.appendChild(div);
         });
-    } catch (e) { c.innerHTML = '<div class="sin-huecos">Error.</div>'; }
+    } catch (e) {
+        logError('Consultar citas', e);
+        c.innerHTML = '<div class="sin-huecos">Error.</div>';
+    }
 }
 
 async function cancelarCita(id) {
@@ -483,7 +525,7 @@ async function cancelarCita(id) {
         const data = await res.json();
         mostrarToast(data.mensaje || data.error, res.ok ? 'exito' : 'error');
         if (res.ok) consultarCitas();
-    } catch (e) { mostrarToast('Error al conectar', 'error'); }
+    } catch (e) { manejarErrorCatch(e, 'Cancelar cita'); }
 }
 
 async function solicitarModificacion(id) {
@@ -497,7 +539,7 @@ async function solicitarModificacion(id) {
         const data = await res.json();
         mostrarToast(data.mensaje || data.error, res.ok ? 'exito' : 'error');
         if (res.ok) consultarCitas();
-    } catch (e) { mostrarToast('Error al conectar', 'error'); }
+    } catch (e) { manejarErrorCatch(e, 'Modificar cita'); }
 }
 
 // ===== PENDIENTES =====
@@ -538,7 +580,10 @@ async function cargarPendientes() {
             `;
             c.appendChild(div);
         });
-    } catch (e) { c.innerHTML = '<div class="sin-huecos">Error.</div>'; }
+    } catch (e) {
+        logError('Cargar pendientes', e);
+        c.innerHTML = '<div class="sin-huecos">Error.</div>';
+    }
 }
 
 async function confirmarCita(id) {
@@ -550,8 +595,9 @@ async function confirmarCita(id) {
         });
         const d = await res.json();
         mostrarToast(d.mensaje || d.error, res.ok ? 'exito' : 'error');
+        if (!res.ok) logError('Confirmar cita (servidor)', { status: res.status, d });
         cargarPendientes();
-    } catch (e) { mostrarToast('Error al conectar', 'error'); }
+    } catch (e) { manejarErrorCatch(e, 'Confirmar cita'); }
 }
 
 async function rechazarCita(id) {
@@ -573,9 +619,10 @@ async function rechazarCita(id) {
             }
         } else {
             mostrarToast(d.error || 'Error', 'error');
+            logError('Rechazar cita (servidor)', { status: res.status, d });
         }
         cargarPendientes();
-    } catch (e) { mostrarToast('Error al conectar', 'error'); }
+    } catch (e) { manejarErrorCatch(e, 'Rechazar cita'); }
 }
 
 // ===== HISTORIAL =====
@@ -634,7 +681,10 @@ async function cargarHistorial() {
             `;
             c.appendChild(div);
         });
-    } catch (e) { c.innerHTML = '<div class="sin-huecos">Error.</div>'; }
+    } catch (e) {
+        logError('Cargar historial', e);
+        c.innerHTML = '<div class="sin-huecos">Error.</div>';
+    }
 }
 
 async function cancelarCitaConfirmada(id) {
@@ -656,9 +706,10 @@ async function cancelarCitaConfirmada(id) {
             }
         } else {
             mostrarToast(d.error || 'Error', 'error');
+            logError('Cancelar cita confirmada', { status: res.status, d });
         }
         cargarHistorial();
-    } catch (e) { mostrarToast('Error al conectar', 'error'); }
+    } catch (e) { manejarErrorCatch(e, 'Cancelar cita confirmada'); }
 }
 
 async function eliminarCitaPermanente(id) {
@@ -671,7 +722,7 @@ async function eliminarCitaPermanente(id) {
         const d = await res.json();
         mostrarToast(d.mensaje || d.error, res.ok ? 'exito' : 'error');
         if (res.ok) { cargarHistorial(); cargarPendientes(); }
-    } catch (e) { mostrarToast('Error al conectar', 'error'); }
+    } catch (e) { manejarErrorCatch(e, 'Eliminar cita'); }
 }
 
 // ===== BARBEROS (ADMIN) =====
@@ -719,6 +770,7 @@ async function guardarBarbero() {
         const res = await fetch(url, { method, headers: getAuthHeaders(), body: JSON.stringify(body) });
         const d = await res.json();
         mostrarToast(d.mensaje || d.error, res.ok ? 'exito' : 'error');
+        if (!res.ok) logError('Guardar barbero (servidor)', { status: res.status, d });
         if (res.ok) {
             setTimeout(() => {
                 cerrarFormBarbero();
@@ -727,7 +779,7 @@ async function guardarBarbero() {
                 cargarBarberosCliente();
             }, 1500);
         }
-    } catch (e) { mostrarToast('Error al conectar', 'error'); }
+    } catch (e) { manejarErrorCatch(e, 'Guardar barbero'); }
 }
 
 async function cargarBarberos() {
@@ -776,7 +828,10 @@ async function cargarBarberos() {
             `;
             c.appendChild(div);
         });
-    } catch (e) { c.innerHTML = '<div class="sin-huecos">Error.</div>'; }
+    } catch (e) {
+        logError('Cargar barberos', e);
+        c.innerHTML = '<div class="sin-huecos">Error.</div>';
+    }
 }
 
 async function editarBarbero(id) {
@@ -805,7 +860,7 @@ async function editarBarbero(id) {
         document.querySelectorAll('.dia-check').forEach(c => c.checked = dias.includes(c.value));
         document.getElementById('formBarbero').style.display = 'block';
         document.getElementById('formBarbero').scrollIntoView({ behavior: 'smooth' });
-    } catch (e) { mostrarToast('Error al cargar datos', 'error'); }
+    } catch (e) { manejarErrorCatch(e, 'Editar barbero'); }
 }
 
 async function desactivarBarbero(id) {
@@ -817,7 +872,7 @@ async function desactivarBarbero(id) {
         const d = await res.json();
         mostrarToast(d.mensaje || d.error, res.ok ? 'exito' : 'error');
         if (res.ok) { cargarBarberos(); cargarBarberosSelectorAdmin(); cargarBarberosCliente(); }
-    } catch (e) { mostrarToast('Error al conectar', 'error'); }
+    } catch (e) { manejarErrorCatch(e, 'Desactivar barbero'); }
 }
 
 async function eliminarBarberoPermanente(id) {
@@ -830,7 +885,7 @@ async function eliminarBarberoPermanente(id) {
         const d = await res.json();
         mostrarToast(d.mensaje || d.error, res.ok ? 'exito' : 'error');
         if (res.ok) { cargarBarberos(); cargarBarberosSelectorAdmin(); cargarBarberosCliente(); }
-    } catch (e) { mostrarToast('Error al conectar', 'error'); }
+    } catch (e) { manejarErrorCatch(e, 'Eliminar barbero'); }
 }
 
 async function reactivarBarbero(id) {
@@ -847,7 +902,7 @@ async function reactivarBarbero(id) {
             cargarBarberosSelectorAdmin();
             cargarBarberosCliente();
         }
-    } catch (e) { mostrarToast('Error al conectar', 'error'); }
+    } catch (e) { manejarErrorCatch(e, 'Reactivar barbero'); }
 }
 
 async function cargarBarberosSelectorAdmin() {
@@ -879,7 +934,9 @@ async function cargarBarberosSelectorAdmin() {
                 });
             }
         }
-    } catch (e) {}
+    } catch (e) {
+        logError('Cargar barberos selector admin', e);
+    }
 }
 
 // ===== SERVICIOS (ADMIN) =====
@@ -898,7 +955,6 @@ async function cargarServiciosSelectorAdmin() {
                 sel.appendChild(o);
             });
             if (val) sel.value = val;
-            // FIX: asegurar que el selector sea visible para admin
             if (sel.parentElement) sel.parentElement.style.display = '';
         } else {
             const o = document.createElement('option');
@@ -908,7 +964,9 @@ async function cargarServiciosSelectorAdmin() {
             sel.appendChild(o);
             if (sel.parentElement) sel.parentElement.style.display = 'none';
         }
-    } catch (e) {}
+    } catch (e) {
+        logError('Cargar servicios selector admin', e);
+    }
 }
 
 async function cargarServiciosAdmin() {
@@ -942,7 +1000,10 @@ async function cargarServiciosAdmin() {
             `;
             c.appendChild(div);
         });
-    } catch (e) { c.innerHTML = '<div class="sin-huecos">Error.</div>'; }
+    } catch (e) {
+        logError('Cargar servicios admin', e);
+        c.innerHTML = '<div class="sin-huecos">Error.</div>';
+    }
 }
 
 function abrirFormServicio() {
@@ -983,10 +1044,11 @@ async function guardarServicio() {
         msg.className = 'mensaje ' + (res.ok ? 'exito' : 'error');
         msg.textContent = d.mensaje || d.error;
         msg.style.display = 'block';
+        if (!res.ok) logError('Guardar servicio (servidor)', { status: res.status, d });
         if (res.ok) {
             setTimeout(() => { cerrarFormServicio(); cargarServiciosAdmin(); }, 1000);
         }
-    } catch (e) { mostrarToast('Error al conectar', 'error'); }
+    } catch (e) { manejarErrorCatch(e, 'Guardar servicio'); }
 }
 
 async function editarServicio(id) {
@@ -1004,7 +1066,7 @@ async function editarServicio(id) {
         document.getElementById('servicioDescripcion').value = s.descripcion || '';
         document.getElementById('formServicio').style.display = 'block';
         document.getElementById('formServicio').scrollIntoView({ behavior: 'smooth' });
-    } catch (e) { mostrarToast('Error al cargar', 'error'); }
+    } catch (e) { manejarErrorCatch(e, 'Editar servicio'); }
 }
 
 async function toggleServicioActivo(id, activo) {
@@ -1014,7 +1076,7 @@ async function toggleServicioActivo(id, activo) {
             body: JSON.stringify({ activo: !activo })
         });
         if (res.ok) cargarServiciosAdmin();
-    } catch (e) {}
+    } catch (e) { logError('Toggle servicio', e); }
 }
 
 async function eliminarServicio(id) {
@@ -1026,7 +1088,7 @@ async function eliminarServicio(id) {
         const d = await res.json();
         mostrarToast(d.mensaje || d.error, res.ok ? 'exito' : 'error');
         if (res.ok) cargarServiciosAdmin();
-    } catch (e) { mostrarToast('Error al conectar', 'error'); }
+    } catch (e) { manejarErrorCatch(e, 'Eliminar servicio'); }
 }
 
 // ===== CATALOGO (ADMIN) =====
@@ -1061,7 +1123,10 @@ async function cargarCatalogoAdmin() {
                 `).join('');
         };
         c.innerHTML = render('Productos', prods) + render('Estilos', ests);
-    } catch (e) { c.innerHTML = '<div class="sin-huecos">Error.</div>'; }
+    } catch (e) {
+        logError('Cargar catalogo admin', e);
+        c.innerHTML = '<div class="sin-huecos">Error.</div>';
+    }
 }
 
 function abrirFormItem() {
@@ -1098,8 +1163,9 @@ async function guardarItem() {
         msg.className = 'mensaje ' + (res.ok ? 'exito' : 'error');
         msg.textContent = d.mensaje || d.error;
         msg.style.display = 'block';
+        if (!res.ok) logError('Guardar item (servidor)', { status: res.status, d });
         if (res.ok) setTimeout(() => { cerrarFormItem(); cargarCatalogoAdmin(); }, 1000);
-    } catch (e) { mostrarToast('Error al conectar', 'error'); }
+    } catch (e) { manejarErrorCatch(e, 'Guardar item'); }
 }
 
 async function editarItem(id) {
@@ -1117,7 +1183,7 @@ async function editarItem(id) {
         document.getElementById('itemOrden').value = it.orden || 0;
         document.getElementById('formItem').style.display = 'block';
         document.getElementById('formItem').scrollIntoView({ behavior: 'smooth' });
-    } catch (e) { mostrarToast('Error al cargar', 'error'); }
+    } catch (e) { manejarErrorCatch(e, 'Editar item'); }
 }
 
 async function toggleItemActivo(id, activo) {
@@ -1127,7 +1193,7 @@ async function toggleItemActivo(id, activo) {
             body: JSON.stringify({ activo: !activo })
         });
         if (res.ok) cargarCatalogoAdmin();
-    } catch (e) {}
+    } catch (e) { logError('Toggle item', e); }
 }
 
 async function eliminarItem(id) {
@@ -1139,7 +1205,7 @@ async function eliminarItem(id) {
         const d = await res.json();
         mostrarToast(d.mensaje || d.error, res.ok ? 'exito' : 'error');
         if (res.ok) cargarCatalogoAdmin();
-    } catch (e) { mostrarToast('Error al conectar', 'error'); }
+    } catch (e) { manejarErrorCatch(e, 'Eliminar item'); }
 }
 
 // ===== BLOQUEAR DIAS =====
@@ -1177,10 +1243,12 @@ async function bloquearDias() {
         } else {
             msg.className = 'mensaje error';
             msg.textContent = d.error || 'Error';
+            logError('Bloquear dias (servidor)', { status: res.status, d });
         }
     } catch (e) {
+        manejarErrorCatch(e, 'Bloquear días');
         msg.className = 'mensaje error';
-        msg.textContent = 'Error al conectar.';
+        msg.textContent = 'Error al conectar. Revisa la consola (F12) para más detalle.';
     }
 }
 
@@ -1210,7 +1278,7 @@ async function cargarEstadisticas() {
         dibujarGraficoDona('graficoBarberos', data.barberos.nombres, data.barberos.cantidades);
         dibujarTopClientes(data.clientes_top, 'topClientes');
     } catch (e) {
-        console.error('Error cargando estadísticas:', e);
+        logError('Cargar estadisticas', e);
         mostrarToast('Error al cargar estadísticas', 'error');
     }
 }
@@ -1238,7 +1306,7 @@ async function cargarMisEstadisticas() {
         dibujarGraficoDona('graficoMisServicios', data.barberos.nombres, data.barberos.cantidades);
         dibujarTopClientes(data.clientes_top, 'topMisClientes');
     } catch (e) {
-        console.error('Error cargando estadísticas:', e);
+        logError('Cargar mis estadisticas', e);
         mostrarToast('Error al cargar estadísticas', 'error');
     }
 }
@@ -1430,7 +1498,7 @@ async function verDetalle(tipo) {
         html += '</tbody></table>';
         contenido.innerHTML = html;
     } catch (e) {
-        console.error('Error cargando detalle:', e);
+        logError('Ver detalle', e);
         contenido.innerHTML = '<div class="detalle-vacio">Error al cargar</div>';
     }
 }
@@ -1519,26 +1587,22 @@ function avisarPorWhatsApp(nombre, telefono, fecha, hora, accion) {
 let deferredPrompt = null;
 let yaInstalada = false;
 
-// Detectar si la app ya está instalada
 if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true) {
     yaInstalada = true;
 }
 
-// Capturar el evento de instalación (solo en Chrome/Edge/Brave/Opera)
 window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault();
     deferredPrompt = e;
     actualizarBotonInstalar();
 });
 
-// Detectar cuando se instala
 window.addEventListener('appinstalled', () => {
     yaInstalada = true;
     actualizarBotonInstalar();
     mostrarToast('Aplicacion instalada correctamente', 'exito');
 });
 
-// Detectar tipo de dispositivo/navegador
 function esIphone() {
     return /iPhone|iPad|iPod/.test(navigator.userAgent) && !window.MSStream;
 }
@@ -1551,7 +1615,6 @@ function esSafariMovil() {
     return esIphone() && /Safari/.test(navigator.userAgent) && !/CriOS|FxiOS/.test(navigator.userAgent);
 }
 
-// Mostrar u ocultar el botón según el estado
 function actualizarBotonInstalar() {
     const bloque = document.getElementById('bloqueInstalar');
     if (!bloque) return;
@@ -1562,7 +1625,6 @@ function actualizarBotonInstalar() {
     }
 }
 
-// Abrir modal de instalar
 function abrirModalInstalar() {
     document.getElementById('passwordInstalar').value = '';
     const msg = document.getElementById('mensajeInstalar');
@@ -1572,12 +1634,10 @@ function abrirModalInstalar() {
     setTimeout(() => document.getElementById('passwordInstalar').focus(), 100);
 }
 
-// Cerrar modal de instalar
 function cerrarModalInstalar() {
     document.getElementById('modal-instalar').classList.remove('activo');
 }
 
-// Verificar contraseña y ejecutar instalación
 async function verificarEInstalar() {
     const password = document.getElementById('passwordInstalar').value;
     const msg = document.getElementById('mensajeInstalar');
@@ -1589,7 +1649,6 @@ async function verificarEInstalar() {
         return;
     }
 
-    // Verificar contra el backend
     try {
         const res = await fetch(`${API_URL}/api/login`, {
             method: 'POST',
@@ -1604,10 +1663,8 @@ async function verificarEInstalar() {
             return;
         }
 
-        // Contraseña correcta → proceder con la instalación
         cerrarModalInstalar();
 
-        // Caso 1: Firefox (no soporta PWA)
         if (esFirefox()) {
             setTimeout(() => {
                 mostrarToast('Firefox no soporta instalar apps. Usa Chrome o Edge.', 'error', 6000);
@@ -1615,7 +1672,6 @@ async function verificarEInstalar() {
             return;
         }
 
-        // Caso 2: iPhone (mostrar instrucciones)
         if (esIphone()) {
             setTimeout(() => {
                 document.getElementById('modal-instrucciones-iphone').classList.add('activo');
@@ -1623,7 +1679,6 @@ async function verificarEInstalar() {
             return;
         }
 
-        // Caso 3: Chrome/Edge/Android con prompt disponible
         if (deferredPrompt) {
             setTimeout(async () => {
                 deferredPrompt.prompt();
@@ -1638,7 +1693,6 @@ async function verificarEInstalar() {
             return;
         }
 
-        // Caso 4: Ya instalada o no hay prompt (raro)
         setTimeout(() => {
             if (yaInstalada) {
                 mostrarToast('La aplicacion ya esta instalada', 'info');
@@ -1648,18 +1702,17 @@ async function verificarEInstalar() {
         }, 300);
 
     } catch (e) {
+        manejarErrorCatch(e, 'Instalar app');
         msg.className = 'mensaje error';
         msg.textContent = 'Error al conectar con el servidor';
         msg.style.display = 'block';
     }
 }
 
-// Cerrar modal de instrucciones iPhone
 function cerrarModalInstrucciones() {
     document.getElementById('modal-instrucciones-iphone').classList.remove('activo');
 }
 
-// Exponer al global
 window.abrirModalInstalar = abrirModalInstalar;
 window.cerrarModalInstalar = cerrarModalInstalar;
 window.verificarEInstalar = verificarEInstalar;
@@ -1718,6 +1771,7 @@ function buscarClientesNombre() {
             `).join('');
             dropdown.style.display = 'block';
         } catch (e) {
+            logError('Buscar clientes', e);
             dropdown.style.display = 'none';
         }
     }, 300);
@@ -1733,7 +1787,6 @@ function seleccionarCliente(index) {
     validarTelefono();
 }
 
-// Cerrar dropdown al hacer clic fuera
 document.addEventListener('click', (e) => {
     const dropdown = document.getElementById('sugerenciasClientes');
     const input = document.getElementById('nombre');
@@ -1767,7 +1820,7 @@ function validarTelefono() {
     const val = input.value.trim();
     if (val.length === 0) {
         input.classList.remove('campo-valido', 'campo-invalido');
-        return true; // teléfono es opcional
+        return true;
     }
     const soloDigitos = val.replace(/\D/g, '');
     if (soloDigitos.length < 7) {
@@ -1782,7 +1835,6 @@ function validarTelefono() {
 
 // ===== ATAJOS DE TECLADO =====
 document.addEventListener('keydown', (e) => {
-    // ESC: cerrar cualquier modal activo
     if (e.key === 'Escape') {
         const modales = ['modal-overlay', 'modal-detalle', 'modal-instalar', 'modal-instrucciones-iphone'];
         modales.forEach(id => {
@@ -1800,14 +1852,12 @@ document.addEventListener('keydown', (e) => {
         return;
     }
 
-    // Solo nos interesa Enter de aquí en adelante
     if (e.key !== 'Enter') return;
 
     const activo = document.activeElement;
     const tag = activo?.tagName;
     const id = activo?.id;
 
-    // 1. Modal de confirmación activo → aceptar (si el foco NO está en un input/textarea)
     const modal = document.getElementById('modal-overlay');
     if (modal && modal.classList.contains('activo') && modalResolve) {
         if (tag !== 'INPUT' && tag !== 'TEXTAREA') {
@@ -1819,7 +1869,6 @@ document.addEventListener('keydown', (e) => {
         }
     }
 
-    // 2. Modal de detalle activo → cerrar
     const mDetalle = document.getElementById('modal-detalle');
     if (mDetalle && mDetalle.classList.contains('activo')) {
         e.preventDefault();
@@ -1827,7 +1876,6 @@ document.addEventListener('keydown', (e) => {
         return;
     }
 
-    // 3. Modal de instrucciones iPhone → cerrar
     const mIphone = document.getElementById('modal-instrucciones-iphone');
     if (mIphone && mIphone.classList.contains('activo')) {
         e.preventDefault();
@@ -1835,16 +1883,13 @@ document.addEventListener('keydown', (e) => {
         return;
     }
 
-    // 4. Formulario de reserva: Enter en nombre o teléfono
     if (id === 'nombre' || id === 'telefono') {
         const dd = document.getElementById('sugerenciasClientes');
-        // 4a. Si el dropdown de sugerencias está abierto, seleccionar la primera
         if (id === 'nombre' && dd && dd.style.display === 'block' && sugerenciasActuales.length > 0) {
             e.preventDefault();
             seleccionarCliente(0);
             return;
         }
-        // 4b. Si el formulario de reserva está visible, enviar la reserva
         const formReserva = document.getElementById('formReserva');
         if (formReserva && formReserva.style.display !== 'none') {
             e.preventDefault();
@@ -1853,7 +1898,6 @@ document.addEventListener('keydown', (e) => {
         }
     }
 
-    // 5. Historial: Enter en el buscador dispara búsqueda inmediata (sin esperar debounce)
     if (id === 'busquedaHistorial') {
         e.preventDefault();
         clearTimeout(timeoutBusquedaHistorial);
@@ -1861,7 +1905,6 @@ document.addEventListener('keydown', (e) => {
         return;
     }
 
-    // 6. Mis citas: Enter en el teléfono consulta
     if (id === 'telefonoConsulta') {
         e.preventDefault();
         consultarCitas();
@@ -1869,13 +1912,11 @@ document.addEventListener('keydown', (e) => {
     }
 });
 
-// Exponer al global
 window.buscarClientesNombre = buscarClientesNombre;
 window.seleccionarCliente = seleccionarCliente;
 window.validarNombre = validarNombre;
 window.validarTelefono = validarTelefono;
 
-// Conectar validación a los inputs
 document.addEventListener('DOMContentLoaded', () => {
     const inputNombre = document.getElementById('nombre');
     const inputTel = document.getElementById('telefono');
@@ -1903,7 +1944,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const iFn = document.getElementById('bloqueoFin');
         if (iI) { iI.value = fechaHoy; iI.min = fechaHoy; }
         if (iFn) { iFn.value = fechaHoy; iFn.min = fechaHoy; }
-    } catch (e) {}
+    } catch (e) { logError('Init fechas', e); }
     cargarBarberosCliente();
 });
 
