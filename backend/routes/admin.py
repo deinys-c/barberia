@@ -17,7 +17,7 @@ def listar_barberos():
         conn = get_db()
         cursor = conn.cursor()
         cursor.execute('''
-            SELECT id, nombre, telefono, email, hora_inicio, hora_fin, 
+            SELECT id, nombre, telefono, email, telegram_chat_id, hora_inicio, hora_fin, 
                    pausa_inicio, pausa_fin, dias_trabajo, activo 
             FROM barberos 
             ORDER BY activo DESC, nombre
