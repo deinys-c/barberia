@@ -273,10 +273,10 @@ function cambiarTabBarbero(tab) {
         cargarMisEstadisticas();
     }
     else if (tab === 'configuracion') {
-    activar(idxConfig); document.getElementById('tabConfiguracion').style.display = 'block';
-    cargarBarberosSelectorAdmin();
-    actualizarBotonInstalar();
-}
+        activar(idxConfig); document.getElementById('tabConfiguracion').style.display = 'block';
+        cargarBarberosSelectorAdmin();
+        actualizarBotonInstalar();
+    }
 }
 
 // ===== RESERVAR =====
@@ -354,21 +354,30 @@ async function cargarHuecos() {
     }
 }
 
+// Guard para evitar doble submit
+let reservandoEnProceso = false;
+
 async function reservar() {
+    if (reservandoEnProceso) return;
+
     const fecha = document.getElementById('fecha').value;
     const servicio = document.getElementById('servicio').value;
     const barberoId = parseInt(document.getElementById('barbero').value) || 0;
     const nombre = document.getElementById('nombre').value.trim();
     const telefono = document.getElementById('telefono').value.trim();
     const notas = document.getElementById('notas').value.trim();
+
     if (!validarNombre()) { mostrarToast('El nombre debe tener al menos 2 caracteres', 'error'); return; }
     if (!validarTelefono()) { mostrarToast('El teléfono debe tener al menos 7 dígitos', 'error'); return; }
     if (!horaSeleccionada) { mostrarToast('Selecciona hora', 'error'); return; }
     if (!servicio) { mostrarToast('Selecciona servicio', 'error'); return; }
+
+    reservandoEnProceso = true;
     const msg = document.getElementById('mensajeReserva');
     msg.className = 'mensaje info';
     msg.textContent = 'Procesando...';
     msg.style.display = 'block';
+
     try {
         const res = await fetch(`${API_URL}/api/reservar`, {
             method: 'POST',
@@ -388,11 +397,15 @@ async function reservar() {
             document.getElementById('nombre').value = '';
             document.getElementById('telefono').value = '';
             document.getElementById('notas').value = '';
+            document.getElementById('nombre').classList.remove('campo-valido', 'campo-invalido');
+            document.getElementById('telefono').classList.remove('campo-valido', 'campo-invalido');
             horaSeleccionada = null;
         }
     } catch (e) {
         msg.className = 'mensaje error';
         msg.textContent = 'Error al conectar.';
+    } finally {
+        reservandoEnProceso = false;
     }
 }
 
@@ -410,11 +423,11 @@ async function consultarCitas() {
         citas.forEach(ct => {
             const div = document.createElement('div');
             div.className = 'cita-item';
-            
+
             let estadoClase = 'estado-pendiente';
             let estadoTexto = 'Pendiente';
             let estiloExtra = '';
-            
+
             if (ct.estado === 'confirmada') {
                 estadoClase = 'estado-confirmada';
                 estadoTexto = 'Confirmada';
@@ -426,7 +439,7 @@ async function consultarCitas() {
                 estadoTexto = 'Cancelada por el barbero';
                 estiloExtra = 'border-left-color: #d97a7a;';
             }
-            
+
             let avisoCancelada = '';
             if (ct.estado === 'cancelada_por_barbero') {
                 avisoCancelada = `
@@ -435,7 +448,7 @@ async function consultarCitas() {
                     </div>
                 `;
             }
-            
+
             let botones = '';
             if (ct.estado === 'confirmada' || ct.estado === 'pendiente_confirmacion') {
                 botones = `
@@ -443,7 +456,7 @@ async function consultarCitas() {
                     <button class="btn-modificar" onclick="solicitarModificacion(${ct.id})"><i class="fa-solid fa-pen"></i> Modificar</button>
                 `;
             }
-            
+
             div.style = estiloExtra;
             div.innerHTML = `
                 <div class="info">
@@ -569,19 +582,19 @@ async function rechazarCita(id) {
 async function cargarHistorial() {
     const c = document.getElementById('historialLista');
     if (!c) return;
-    
+
     const bid = document.getElementById('filtroBarberoHistorial')?.value || 0;
     const desde = document.getElementById('fechaDesdeHistorial')?.value || '';
     const hasta = document.getElementById('fechaHastaHistorial')?.value || '';
     const estado = document.getElementById('estadoHistorial')?.value || '';
     const busqueda = document.getElementById('busquedaHistorial')?.value.trim() || '';
-    
+
     let url = `${API_URL}/api/panel/historial?barbero_id=${bid}`;
     if (desde) url += `&fecha_desde=${desde}`;
     if (hasta) url += `&fecha_hasta=${hasta}`;
     if (estado) url += `&estado=${encodeURIComponent(estado)}`;
     if (busqueda) url += `&busqueda=${encodeURIComponent(busqueda)}`;
-    
+
     c.innerHTML = '<div class="sin-huecos">Cargando...</div>';
     try {
         const res = await fetch(url, { headers: getAuthHeaders() });
@@ -686,7 +699,7 @@ async function guardarBarbero() {
     if (!nombre) { mostrarToast('El nombre es obligatorio', 'error'); return; }
     const dias = Array.from(document.querySelectorAll('.dia-check:checked')).map(c => c.value);
     if (!dias.length) { mostrarToast('Selecciona días', 'error'); return; }
-    
+
     const conPausa = document.getElementById('barberoConPausa').value === 'si';
     const body = {
         nombre,
@@ -729,7 +742,7 @@ async function cargarBarberos() {
             const div = document.createElement('div');
             div.className = 'cita-item';
             div.style.opacity = b.activo ? 1 : 0.6;
-            
+
             let botones = '';
             if (esAdmin()) {
                 if (b.activo) {
@@ -746,10 +759,10 @@ async function cargarBarberos() {
                     `;
                 }
             }
-            
+
             const horario = `${escaparHTML(b.hora_inicio || '08:00')} - ${escaparHTML(b.hora_fin || '17:00')}`;
             const pausa = (b.pausa_inicio && b.pausa_fin) ? ` | Pausa: ${escaparHTML(b.pausa_inicio)} - ${escaparHTML(b.pausa_fin)}` : '';
-            
+
             div.innerHTML = `
                 <div class="info">
                     <div class="fecha-hora">${escaparHTML(b.nombre)} ${!b.activo ? '<small style="color:#8a7a6a;">(Inactivo)</small>' : ''}</div>
@@ -881,13 +894,15 @@ async function cargarServiciosSelectorAdmin() {
                 sel.appendChild(o);
             });
             if (val) sel.value = val;
+            // FIX: asegurar que el selector sea visible para admin
+            if (sel.parentElement) sel.parentElement.style.display = '';
         } else {
             const o = document.createElement('option');
             o.value = currentUser.barbero_id;
             o.textContent = 'Mis servicios';
             sel.innerHTML = '';
             sel.appendChild(o);
-            sel.parentElement.style.display = 'none';
+            if (sel.parentElement) sel.parentElement.style.display = 'none';
         }
     } catch (e) {}
 }
@@ -1180,12 +1195,12 @@ async function cargarEstadisticas() {
             mostrarToast(data.error, 'error');
             return;
         }
-        
+
         document.getElementById('statCitasMes').textContent = data.resumen.citas_mes_actual;
         document.getElementById('statCitasTotal').textContent = data.resumen.citas_totales;
         document.getElementById('statClientes').textContent = data.resumen.total_clientes;
         document.getElementById('statIngresos').textContent = Number(data.resumen.ingresos_totales).toLocaleString('es-CO') + ' COP';
-        
+
         dibujarGraficoBarras('graficoCitas', data.citas_mes.etiquetas, data.citas_mes.valores, 'Citas');
         dibujarGraficoLineas('graficoIngresos', data.ingresos_mes.etiquetas, data.ingresos_mes.valores);
         dibujarGraficoDona('graficoBarberos', data.barberos.nombres, data.barberos.cantidades);
@@ -1208,12 +1223,12 @@ async function cargarMisEstadisticas() {
             mostrarToast(data.error, 'error');
             return;
         }
-        
+
         document.getElementById('statMisCitasMes').textContent = data.resumen.citas_mes_actual;
         document.getElementById('statMisCitasTotal').textContent = data.resumen.citas_totales;
         document.getElementById('statMisClientes').textContent = data.resumen.total_clientes;
         document.getElementById('statMisIngresos').textContent = Number(data.resumen.ingresos_totales).toLocaleString('es-CO') + ' COP';
-        
+
         dibujarGraficoBarras('graficoMisCitas', data.citas_mes.etiquetas, data.citas_mes.valores, 'Citas');
         dibujarGraficoLineas('graficoMisIngresos', data.ingresos_mes.etiquetas, data.ingresos_mes.valores);
         dibujarGraficoDona('graficoMisServicios', data.barberos.nombres, data.barberos.cantidades);
@@ -1345,11 +1360,11 @@ async function verDetalle(tipo) {
     const modal = document.getElementById('modal-detalle');
     const titulo = document.getElementById('detalle-titulo');
     const contenido = document.getElementById('detalle-contenido');
-    
+
     titulo.textContent = 'Cargando...';
     contenido.innerHTML = '<div class="detalle-vacio">Cargando...</div>';
     modal.classList.add('activo');
-    
+
     try {
         const res = await fetch(`${API_URL}/api/admin/estadisticas-detalle?tipo=${tipo}`, { headers: getAuthHeaders() });
         const data = await res.json();
@@ -1358,14 +1373,14 @@ async function verDetalle(tipo) {
             return;
         }
         titulo.textContent = data.titulo;
-        
+
         if (!data.items || !data.items.length) {
             contenido.innerHTML = '<div class="detalle-vacio">No hay datos todavía</div>';
             return;
         }
-        
+
         let html = '<table><thead><tr>';
-        
+
         if (tipo === 'citas_mes' || tipo === 'citas_totales') {
             html += '<th>Fecha</th><th>Hora</th><th>Cliente</th><th>Servicio</th><th>Precio</th><th>Barbero</th>';
             html += '</tr></thead><tbody>';
@@ -1407,7 +1422,7 @@ async function verDetalle(tipo) {
             });
             html += `<tr class="total-line"><td colspan="2"><strong>TOTAL</strong></td><td><strong>${total.toLocaleString('es-CO')} COP</strong></td></tr>`;
         }
-        
+
         html += '</tbody></table>';
         contenido.innerHTML = html;
     } catch (e) {
@@ -1482,7 +1497,7 @@ function avisarPorWhatsApp(nombre, telefono, fecha, hora, accion) {
     if (!numero.startsWith('58')) {
         numero = '58' + numero;
     }
-    
+
     let mensaje = '';
     if (accion === 'rechazada') {
         mensaje = `Hola ${nombre}, tu solicitud de cita para el ${fecha} a las ${hora} NO pudo ser aceptada. Por favor, contáctanos para agendar en otro horario. - Gocho Barber`;
@@ -1491,7 +1506,7 @@ function avisarPorWhatsApp(nombre, telefono, fecha, hora, accion) {
     } else {
         mensaje = `Hola ${nombre}, te escribimos de Gocho Barber por tu cita del ${fecha} a las ${hora}.`;
     }
-    
+
     const mensajeCod = encodeURIComponent(mensaje);
     window.open(`https://wa.me/${numero}?text=${mensajeCod}`, '_blank');
 }
@@ -1562,14 +1577,14 @@ function cerrarModalInstalar() {
 async function verificarEInstalar() {
     const password = document.getElementById('passwordInstalar').value;
     const msg = document.getElementById('mensajeInstalar');
-    
+
     if (!password) {
         msg.className = 'mensaje error';
         msg.textContent = 'Ingresa la contraseña del admin';
         msg.style.display = 'block';
         return;
     }
-    
+
     // Verificar contra el backend
     try {
         const res = await fetch(`${API_URL}/api/login`, {
@@ -1577,17 +1592,17 @@ async function verificarEInstalar() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ username: 'admin', password })
         });
-        
+
         if (!res.ok) {
             msg.className = 'mensaje error';
             msg.textContent = 'Contrasena incorrecta';
             msg.style.display = 'block';
             return;
         }
-        
+
         // Contraseña correcta → proceder con la instalación
         cerrarModalInstalar();
-        
+
         // Caso 1: Firefox (no soporta PWA)
         if (esFirefox()) {
             setTimeout(() => {
@@ -1595,7 +1610,7 @@ async function verificarEInstalar() {
             }, 300);
             return;
         }
-        
+
         // Caso 2: iPhone (mostrar instrucciones)
         if (esIphone()) {
             setTimeout(() => {
@@ -1603,7 +1618,7 @@ async function verificarEInstalar() {
             }, 300);
             return;
         }
-        
+
         // Caso 3: Chrome/Edge/Android con prompt disponible
         if (deferredPrompt) {
             setTimeout(async () => {
@@ -1618,7 +1633,7 @@ async function verificarEInstalar() {
             }, 300);
             return;
         }
-        
+
         // Caso 4: Ya instalada o no hay prompt (raro)
         setTimeout(() => {
             if (yaInstalada) {
@@ -1627,7 +1642,7 @@ async function verificarEInstalar() {
                 mostrarToast('Tu navegador no soporta instalar apps. Usa Chrome, Edge o Brave.', 'error', 6000);
             }
         }, 300);
-        
+
     } catch (e) {
         msg.className = 'mensaje error';
         msg.textContent = 'Error al conectar con el servidor';
@@ -1645,6 +1660,7 @@ window.abrirModalInstalar = abrirModalInstalar;
 window.cerrarModalInstalar = cerrarModalInstalar;
 window.verificarEInstalar = verificarEInstalar;
 window.cerrarModalInstrucciones = cerrarModalInstrucciones;
+
 // ===== FILTROS HISTORIAL =====
 let timeoutBusquedaHistorial = null;
 
@@ -1672,19 +1688,21 @@ function buscarClientesNombre() {
     const q = document.getElementById('nombre')?.value.trim() || '';
     const dropdown = document.getElementById('sugerenciasClientes');
     if (!dropdown) return;
-    
+
     if (q.length < 2) {
         dropdown.style.display = 'none';
         dropdown.innerHTML = '';
+        sugerenciasActuales = [];
         return;
     }
-    
+
     timeoutBusquedaClientes = setTimeout(async () => {
         try {
             const res = await fetch(`${API_URL}/api/clientes/buscar?q=${encodeURIComponent(q)}`);
             const clientes = await res.json();
             if (!clientes || !clientes.length) {
                 dropdown.style.display = 'none';
+                sugerenciasActuales = [];
                 return;
             }
             sugerenciasActuales = clientes;
@@ -1767,31 +1785,83 @@ document.addEventListener('keydown', (e) => {
             const m = document.getElementById(id);
             if (m && m.classList.contains('activo')) {
                 m.classList.remove('activo');
-                // Si es el de confirmación, resolver como "false"
                 if (id === 'modal-overlay' && modalResolve) {
                     modalResolve(false);
                     modalResolve = null;
                 }
             }
         });
-        // Cerrar dropdown de sugerencias
         const dd = document.getElementById('sugerenciasClientes');
         if (dd) dd.style.display = 'none';
+        return;
     }
-    
-    // Enter: aceptar modal de confirmación
-    if (e.key === 'Enter') {
-        const modal = document.getElementById('modal-overlay');
-        if (modal && modal.classList.contains('activo') && modalResolve) {
-            // No disparar si el foco está en un input/textarea
-            const tag = document.activeElement?.tagName;
-            if (tag !== 'INPUT' && tag !== 'TEXTAREA') {
-                e.preventDefault();
-                modalResolve(true);
-                modalResolve = null;
-                modal.classList.remove('activo');
-            }
+
+    // Solo nos interesa Enter de aquí en adelante
+    if (e.key !== 'Enter') return;
+
+    const activo = document.activeElement;
+    const tag = activo?.tagName;
+    const id = activo?.id;
+
+    // 1. Modal de confirmación activo → aceptar (si el foco NO está en un input/textarea)
+    const modal = document.getElementById('modal-overlay');
+    if (modal && modal.classList.contains('activo') && modalResolve) {
+        if (tag !== 'INPUT' && tag !== 'TEXTAREA') {
+            e.preventDefault();
+            modalResolve(true);
+            modalResolve = null;
+            modal.classList.remove('activo');
+            return;
         }
+    }
+
+    // 2. Modal de detalle activo → cerrar
+    const mDetalle = document.getElementById('modal-detalle');
+    if (mDetalle && mDetalle.classList.contains('activo')) {
+        e.preventDefault();
+        cerrarModalDetalle();
+        return;
+    }
+
+    // 3. Modal de instrucciones iPhone → cerrar
+    const mIphone = document.getElementById('modal-instrucciones-iphone');
+    if (mIphone && mIphone.classList.contains('activo')) {
+        e.preventDefault();
+        cerrarModalInstrucciones();
+        return;
+    }
+
+    // 4. Formulario de reserva: Enter en nombre o teléfono
+    if (id === 'nombre' || id === 'telefono') {
+        const dd = document.getElementById('sugerenciasClientes');
+        // 4a. Si el dropdown de sugerencias está abierto, seleccionar la primera
+        if (id === 'nombre' && dd && dd.style.display === 'block' && sugerenciasActuales.length > 0) {
+            e.preventDefault();
+            seleccionarCliente(0);
+            return;
+        }
+        // 4b. Si el formulario de reserva está visible, enviar la reserva
+        const formReserva = document.getElementById('formReserva');
+        if (formReserva && formReserva.style.display !== 'none') {
+            e.preventDefault();
+            reservar();
+            return;
+        }
+    }
+
+    // 5. Historial: Enter en el buscador dispara búsqueda inmediata (sin esperar debounce)
+    if (id === 'busquedaHistorial') {
+        e.preventDefault();
+        clearTimeout(timeoutBusquedaHistorial);
+        cargarHistorial();
+        return;
+    }
+
+    // 6. Mis citas: Enter en el teléfono consulta
+    if (id === 'telefonoConsulta') {
+        e.preventDefault();
+        consultarCitas();
+        return;
     }
 });
 
