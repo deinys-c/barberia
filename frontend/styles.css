@@ -185,7 +185,9 @@ select option { background: #1a1410; color: #f0d5a8; }
     font-size: 1.1rem;
 }
 .grafico-card canvas {
-    max-height: 250px;
+    width: 100% !important;
+    height: 300px !important;
+    display: block;
 }
 #topClientes {
     padding: 10px;
@@ -377,7 +379,7 @@ body.modo-claro .cliente-top-citas { color: #6a4a2a; }
     
     /* Estadísticas responsive */
     .resumen-valor { font-size: 1.5rem; }
-    .grafico-card canvas { max-height: 200px; }
+    .grafico-card canvas { height: 260px !important; }
 }
 
 @media (max-width: 480px) {
@@ -392,6 +394,7 @@ body.modo-claro .cliente-top-citas { color: #6a4a2a; }
     .resumen-grid { grid-template-columns: 1fr 1fr; }
     .resumen-valor { font-size: 1.3rem; }
     .graficos-grid { grid-template-columns: 1fr; }
+    .grafico-card canvas { height: 220px !important; }
 }
 
 /* ===== TARJETAS CLICKEABLES ===== */

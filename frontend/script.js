@@ -1258,7 +1258,7 @@ function dibujarGraficoBarras(id, etiquetas, valores, label) {
         },
         options: {
             responsive: true,
-            maintainAspectRatio: true,
+            maintainAspectRatio: false,
             plugins: { legend: { display: false } },
             scales: {
                 y: { beginAtZero: true, ticks: { color: '#8a7a6a', stepSize: 1 } },
@@ -1289,7 +1289,7 @@ function dibujarGraficoLineas(id, etiquetas, valores) {
         },
         options: {
             responsive: true,
-            maintainAspectRatio: true,
+            maintainAspectRatio: false,
             plugins: { legend: { display: false } },
             scales: {
                 y: {
@@ -1329,7 +1329,7 @@ function dibujarGraficoDona(id, nombres, cantidades) {
         },
         options: {
             responsive: true,
-            maintainAspectRatio: true,
+            maintainAspectRatio: false,
             plugins: {
                 legend: {
                     position: 'bottom',
