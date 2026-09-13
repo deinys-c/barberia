@@ -11,5 +11,5 @@ jobs:
     steps:
       - name: Enviar backup
         run: |
-          curl -X GET "https://gochobarber.onrender.com/api/admin/backup-telegram?token=GochoBackup2026SeguroX8K9"
+          curl -X GET "https://gochobarber.onrender.com/api/admin/backup-telegram?token=${{ secrets.BACKUP_TOKEN }}"
           echo "✅ Backup enviado"
