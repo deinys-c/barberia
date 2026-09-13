@@ -241,3 +241,26 @@ def reservar():
             return jsonify({'mensaje': '¡Cita agendada!', 'citaId': cita_id, 'estado': 'confirmada'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+@public_bp.route('/api/clientes/buscar', methods=['GET'])
+def buscar_clientes():
+    """Busca clientes por nombre o telefono (para autocompletado)."""
+    q = request.args.get('q', '').strip()
+    if not q or len(q) < 2:
+        return jsonify([])
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT DISTINCT nombre, telefono
+            FROM clientes
+            WHERE (nombre ILIKE %s OR telefono ILIKE %s)
+            AND telefono IS NOT NULL AND telefono != ''
+            ORDER BY nombre
+            LIMIT 5
+        ''', (f'%{q}%', f'%{q}%'))
+        clientes = cursor.fetchall()
+        conn.close()
+        return jsonify([dict(c) for c in clientes])
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
