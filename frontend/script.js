@@ -118,21 +118,20 @@ function actualizarUISegunRol() {
     document.querySelectorAll('.solo-admin').forEach(el => {
         el.style.setProperty('display', admin ? 'inline-block' : 'none', 'important');
     });
+    document.querySelectorAll('.solo-admin-filtro').forEach(el => {
+        el.style.setProperty('display', admin ? 'block' : 'none', 'important');
+    });
     document.querySelectorAll('.solo-barbero').forEach(el => {
         el.style.setProperty('display', admin ? 'none' : 'inline-block', 'important');
     });
     const filtrosP = document.getElementById('filtrosPendientes');
-    const filtrosH = document.getElementById('filtrosHistorial');
     const filaSel = document.getElementById('filaSelectorBloqueo');
     if (admin) {
         if (filtrosP) filtrosP.style.display = 'flex';
-        if (filtrosH) filtrosH.style.display = 'flex';
         if (filaSel) filaSel.style.display = 'flex';
     } else {
         const selP = document.getElementById('filtroBarberoPendientes');
-        const selH = document.getElementById('filtroBarberoHistorial');
         if (selP) selP.parentElement.style.display = 'none';
-        if (selH) selH.parentElement.style.display = 'none';
         if (filaSel) filaSel.style.display = 'none';
     }
     const infoUser = document.getElementById('infoUsuario');
@@ -569,10 +568,22 @@ async function rechazarCita(id) {
 async function cargarHistorial() {
     const c = document.getElementById('historialLista');
     if (!c) return;
+    
     const bid = document.getElementById('filtroBarberoHistorial')?.value || 0;
+    const desde = document.getElementById('fechaDesdeHistorial')?.value || '';
+    const hasta = document.getElementById('fechaHastaHistorial')?.value || '';
+    const estado = document.getElementById('estadoHistorial')?.value || '';
+    const busqueda = document.getElementById('busquedaHistorial')?.value.trim() || '';
+    
+    let url = `${API_URL}/api/panel/historial?barbero_id=${bid}`;
+    if (desde) url += `&fecha_desde=${desde}`;
+    if (hasta) url += `&fecha_hasta=${hasta}`;
+    if (estado) url += `&estado=${encodeURIComponent(estado)}`;
+    if (busqueda) url += `&busqueda=${encodeURIComponent(busqueda)}`;
+    
     c.innerHTML = '<div class="sin-huecos">Cargando...</div>';
     try {
-        const res = await fetch(`${API_URL}/api/panel/historial?barbero_id=${bid}`, { headers: getAuthHeaders() });
+        const res = await fetch(url, { headers: getAuthHeaders() });
         if (res.status === 401) {
             cerrarSesion();
             document.getElementById('barberoLogin').style.display = 'block';
@@ -581,7 +592,7 @@ async function cargarHistorial() {
         }
         const citas = await res.json();
         c.innerHTML = '';
-        if (!citas || !citas.length) { c.innerHTML = '<div class="sin-huecos">Sin citas.</div>'; return; }
+        if (!citas || !citas.length) { c.innerHTML = '<div class="sin-huecos">Sin citas con estos filtros.</div>'; return; }
         const estados = {
             'confirmada': { clase: 'estado-confirmada', texto: 'Confirmada' },
             'pendiente_confirmacion': { clase: 'estado-pendiente', texto: 'Pendiente' },
@@ -1633,6 +1644,23 @@ window.abrirModalInstalar = abrirModalInstalar;
 window.cerrarModalInstalar = cerrarModalInstalar;
 window.verificarEInstalar = verificarEInstalar;
 window.cerrarModalInstrucciones = cerrarModalInstrucciones;
+// ===== FILTROS HISTORIAL =====
+let timeoutBusquedaHistorial = null;
+
+function buscarHistorialConDelay() {
+    clearTimeout(timeoutBusquedaHistorial);
+    timeoutBusquedaHistorial = setTimeout(() => cargarHistorial(), 500);
+}
+
+function limpiarFiltrosHistorial() {
+    document.getElementById('busquedaHistorial').value = '';
+    document.getElementById('fechaDesdeHistorial').value = '';
+    document.getElementById('fechaHastaHistorial').value = '';
+    document.getElementById('estadoHistorial').value = '';
+    const selB = document.getElementById('filtroBarberoHistorial');
+    if (selB) selB.value = '0';
+    cargarHistorial();
+}
 
 // ===== INICIALIZACIÓN =====
 document.addEventListener('DOMContentLoaded', function() {
@@ -1653,6 +1681,8 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 // ===== EXPONER AL GLOBAL =====
+window.buscarHistorialConDelay = buscarHistorialConDelay;
+window.limpiarFiltrosHistorial = limpiarFiltrosHistorial;
 window.cambiarVista = cambiarVista;
 window.cambiarTabCliente = cambiarTabCliente;
 window.cambiarTabBarbero = cambiarTabBarbero;

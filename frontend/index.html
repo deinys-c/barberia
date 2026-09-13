@@ -137,12 +137,39 @@
                 <h3>Historial de Citas</h3>
                 <div class="filtros-container" id="filtrosHistorial">
                     <div>
-                        <label>Filtrar por barbero</label>
-                        <select id="filtroBarberoHistorial" onchange="cargarHistorial()">
-                            <option value="0">Todos los barberos</option>
+                        <label><i class="fa-solid fa-magnifying-glass"></i> Buscar cliente</label>
+                        <input type="text" id="busquedaHistorial" placeholder="Nombre o telefono" oninput="buscarHistorialConDelay()">
+                    </div>
+                    <div>
+                        <label>Desde</label>
+                        <input type="date" id="fechaDesdeHistorial" onchange="cargarHistorial()">
+                    </div>
+                    <div>
+                        <label>Hasta</label>
+                        <input type="date" id="fechaHastaHistorial" onchange="cargarHistorial()">
+                    </div>
+                    <div>
+                        <label>Estado</label>
+                        <select id="estadoHistorial" onchange="cargarHistorial()">
+                            <option value="">Todos</option>
+                            <option value="confirmada">Confirmada</option>
+                            <option value="pendiente_confirmacion">Pendiente</option>
+                            <option value="realizada">Realizada</option>
+                            <option value="expirada">Expirada</option>
+                            <option value="cancelada_por_cliente">Cancelada (Cliente)</option>
+                            <option value="cancelada_por_barbero">Cancelada (Barbero)</option>
+                            <option value="cancelada_por_sistema">Cancelada (Sistema)</option>
                         </select>
                     </div>
-                    <div><button class="btn btn-secundario" onclick="cargarHistorial()"><i class="fa-solid fa-rotate"></i> Actualizar</button></div>
+                    <div class="solo-admin-filtro">
+                        <label>Barbero</label>
+                        <select id="filtroBarberoHistorial" onchange="cargarHistorial()">
+                            <option value="0">Todos</option>
+                        </select>
+                    </div>
+                    <div style="display:flex; align-items:flex-end;">
+                        <button class="btn btn-secundario" onclick="limpiarFiltrosHistorial()" style="margin-top:0;"><i class="fa-solid fa-xmark"></i> Limpiar</button>
+                    </div>
                 </div>
                 <div id="historialLista" style="margin-top:15px;"></div>
             </div>
