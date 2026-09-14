@@ -1,6 +1,9 @@
 from flask import Blueprint, request, jsonify
 from werkzeug.security import check_password_hash
+from datetime import datetime, timedelta, timezone
+import jwt
 from database import get_db
+from config import SECRET_KEY, JWT_EXPIRATION_HOURS
 
 auth_bp = Blueprint('auth', __name__)
 
@@ -19,8 +22,19 @@ def login():
         conn.close()
         if not user or not check_password_hash(user['password_hash'], password):
             return jsonify({'error': 'Usuario o contraseña incorrectos'}), 401
+
+        # Generar token JWT
+        payload = {
+            'username': user['username'],
+            'rol': user['rol'],
+            'barbero_id': user['barbero_id'],
+            'exp': datetime.now(timezone.utc) + timedelta(hours=JWT_EXPIRATION_HOURS)
+        }
+        token = jwt.encode(payload, SECRET_KEY, algorithm='HS256')
+
         return jsonify({
             'mensaje': 'Login exitoso',
+            'token': token,
             'username': user['username'],
             'rol': user['rol'],
             'barbero_id': user['barbero_id']

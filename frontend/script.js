@@ -120,7 +120,7 @@ async function cargarEstilos() {
 // ===== AUTENTICACION =====
 function getAuthHeaders() {
     const headers = { 'Content-Type': 'application/json', 'Accept': 'application/json' };
-    if (currentUser && currentUser.username) headers['X-Username'] = currentUser.username;
+    if (currentUser && currentUser.token) headers['Authorization'] = `Bearer ${currentUser.token}`;
     return headers;
 }
 
@@ -132,7 +132,16 @@ function guardarSesion(user) {
 function cargarSesion() {
     try {
         const g = localStorage.getItem('currentUser');
-        if (g) currentUser = JSON.parse(g);
+        if (g) {
+            const u = JSON.parse(g);
+            if (u && u.token) {
+                currentUser = u;
+            } else {
+                // Sesión vieja sin token → descartar
+                localStorage.removeItem('currentUser');
+                currentUser = null;
+            }
+        }
     } catch (e) { currentUser = null; }
 }
 
@@ -186,7 +195,7 @@ async function loginUsuario() {
         });
         const data = await res.json();
         if (res.ok) {
-            guardarSesion({ username: data.username, rol: data.rol, barbero_id: data.barbero_id });
+             guardarSesion({ username: data.username, rol: data.rol, barbero_id: data.barbero_id, token: data.token });
             document.getElementById('barberoLogin').style.display = 'none';
             document.getElementById('barberoContenido').style.display = 'block';
             document.getElementById('usernameLogin').value = '';
@@ -1657,6 +1666,7 @@ async function verificarEInstalar() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ username: 'admin', password })
         });
+        // No guardamos el token aquí: es solo para verificar la contraseña
 
         if (!res.ok) {
             msg.className = 'mensaje error';

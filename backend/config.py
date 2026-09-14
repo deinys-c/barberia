@@ -6,11 +6,14 @@ ZONA_HORARIA_VE = timezone(timedelta(hours=-4))
 
 # Telegram
 TELEGRAM_TOKEN = os.environ.get('TELEGRAM_TOKEN', '')
-TELEGRAM_CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID', '')  # string, puede tener varios separados por coma
-TELEGRAM_CHAT_IDS = [x.strip() for x in TELEGRAM_CHAT_ID.split(',') if x.strip()]  # lista parseada
+TELEGRAM_CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID', '')
+TELEGRAM_CHAT_IDS = [x.strip() for x in TELEGRAM_CHAT_ID.split(',') if x.strip()]
 
 # Secret
 SECRET_KEY = os.environ.get('SECRET_KEY', 'dev-key-123')
+
+# JWT
+JWT_EXPIRATION_HOURS = 24 * 30  # 30 días
 
 # Constantes
 DIAS_ES = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo']

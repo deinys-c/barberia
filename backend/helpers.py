@@ -16,14 +16,21 @@ def es_dia_habil(fecha_str):
         return False
 
 def obtener_usuario_actual():
-    """Obtiene el usuario autenticado desde el header X-Username."""
-    username = request.headers.get('X-Username')
-    if not username:
+    """Obtiene el usuario autenticado desde el header Authorization: Bearer <token>."""
+    auth_header = request.headers.get('Authorization', '')
+    if not auth_header.startswith('Bearer '):
+        return None
+    token = auth_header[7:].strip()
+    if not token:
         return None
     try:
+        import jwt
+        from config import SECRET_KEY
+        payload = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
+        # Verificar que el usuario siga existiendo y activo
         conn = get_db()
         cursor = conn.cursor()
-        cursor.execute('SELECT id, username, rol, barbero_id, activo FROM usuarios WHERE username = %s AND activo = 1', (username,))
+        cursor.execute('SELECT id, username, rol, barbero_id, activo FROM usuarios WHERE username = %s AND activo = 1', (payload.get('username'),))
         user = cursor.fetchone()
         conn.close()
         return dict(user) if user else None
