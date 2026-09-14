@@ -1,7 +1,8 @@
 from flask import Blueprint, request, jsonify
 import json
 from database import get_db
-from helpers import requiere_admin, requiere_autenticacion, ahora_ve, respuesta_error
+from helpers import (requiere_admin, requiere_autenticacion, ahora_ve, respuesta_error,
+                     validar_entero, validar_decimal, validar_hora, validar_longitud)
 from notificaciones import enviar_telegram
 
 admin_bp = Blueprint('admin', __name__)
@@ -42,25 +43,42 @@ def crear_barbero():
     """Crea un nuevo barbero."""
     user, error, code = requiere_admin()
     if error: return error, code
-    data = request.json
-    if not data.get('nombre'):
-        return jsonify({'error': 'El nombre es obligatorio'}), 400
+    data = request.json or {}
+
+    ok, nombre_val = validar_longitud(data.get('nombre', '').strip(), 'Nombre', minimo=2, maximo=50)
+    if not ok:
+        return jsonify({'error': nombre_val}), 400
+
+    ok, hora_inicio = validar_hora(data.get('hora_inicio', '08:00'), 'Hora inicio')
+    if not ok:
+        return jsonify({'error': hora_inicio}), 400
+
+    ok, hora_fin = validar_hora(data.get('hora_fin', '17:00'), 'Hora fin')
+    if not ok:
+        return jsonify({'error': hora_fin}), 400
+
+    ok, pausa_inicio_val = validar_hora(data.get('pausa_inicio'), 'Pausa inicio', opcional=True)
+    if not ok:
+        return jsonify({'error': pausa_inicio_val}), 400
+
+    ok, pausa_fin_val = validar_hora(data.get('pausa_fin'), 'Pausa fin', opcional=True)
+    if not ok:
+        return jsonify({'error': pausa_fin_val}), 400
+
     try:
         from werkzeug.security import generate_password_hash
         from database import normalizar_username
         conn = get_db()
         cursor = conn.cursor()
         dias = data.get('dias_trabajo', ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado'])
-        hora_inicio = data.get('hora_inicio', '08:00')
-        hora_fin = data.get('hora_fin', '17:00')
-        pausa_inicio = data.get('pausa_inicio') or None
-        pausa_fin = data.get('pausa_fin') or None
+        pausa_inicio = pausa_inicio_val
+        pausa_fin = pausa_fin_val
 
         telegram_chat_id = (data.get('telegram_chat_id') or '').strip() or None
         cursor.execute('''
             INSERT INTO barberos (nombre, telefono, email, telegram_chat_id, hora_inicio, hora_fin, pausa_inicio, pausa_fin, dias_trabajo)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id
-        ''', (data['nombre'].strip(), data.get('telefono', '').strip(),
+        ''', (nombre_val.strip(), data.get('telefono', '').strip(),
               data.get('email', '').strip(), telegram_chat_id, hora_inicio, hora_fin,
               pausa_inicio, pausa_fin, json.dumps(dias)))
         nuevo_id = cursor.fetchone()['id']
@@ -369,30 +387,44 @@ def crear_servicio():
     """Crea un servicio para un barbero."""
     user, error, code = requiere_autenticacion()
     if error: return error, code
-    data = request.json
-    nombre = data.get('nombre', '').strip()
-    duracion = int(data.get('duracion_minutos', 0))
-    precio = float(data.get('precio', 0))
-    barbero_id = int(data.get('barbero_id', 0))
+    data = request.json or {}
 
+    # Validar nombre
+    ok, nombre = validar_longitud(data.get('nombre', '').strip(), 'Nombre', minimo=1, maximo=100)
+    if not ok:
+        return jsonify({'error': nombre}), 400
+
+    # Validar duración
+    ok, duracion = validar_entero(data.get('duracion_minutos'), 'Duración', minimo=5, maximo=480)
+    if not ok:
+        return jsonify({'error': duracion}), 400
+
+    # Validar precio
+    ok, precio = validar_decimal(data.get('precio'), 'Precio', minimo=0, maximo=100000000)
+    if not ok:
+        return jsonify({'error': precio}), 400
+
+    # Validar barbero_id
+    barbero_id_raw = data.get('barbero_id', 0)
     if user['rol'] == 'barbero' and user['barbero_id']:
         barbero_id = user['barbero_id']
-    if barbero_id == 0:
-        return jsonify({'error': 'Debe especificar un barbero'}), 400
+    else:
+        ok, barbero_id = validar_entero(barbero_id_raw, 'Barbero', minimo=1)
+        if not ok:
+            return jsonify({'error': barbero_id}), 400
 
-    if not nombre:
-        return jsonify({'error': 'El nombre es obligatorio'}), 400
-    if duracion <= 0:
-        return jsonify({'error': 'La duración debe ser mayor a 0'}), 400
-    if precio < 0:
-        return jsonify({'error': 'El precio no puede ser negativo'}), 400
+    # Validar descripción
+    ok, descripcion = validar_longitud(data.get('descripcion', '').strip(), 'Descripción', minimo=0, maximo=200)
+    if not ok:
+        return jsonify({'error': descripcion}), 400
+
     try:
         conn = get_db()
         cursor = conn.cursor()
         cursor.execute('''
             INSERT INTO servicios (barbero_id, nombre, duracion_minutos, precio, descripcion, activo)
             VALUES (%s, %s, %s, %s, %s, 1) RETURNING id
-        ''', (barbero_id, nombre, duracion, precio, data.get('descripcion', '').strip()))
+        ''', (barbero_id, nombre, duracion, precio, descripcion))
         nuevo_id = cursor.fetchone()['id']
         conn.commit()
         conn.close()
@@ -405,7 +437,7 @@ def actualizar_servicio(servicio_id):
     """Actualiza un servicio existente."""
     user, error, code = requiere_autenticacion()
     if error: return error, code
-    data = request.json
+    data = request.json or {}
     try:
         conn = get_db()
         cursor = conn.cursor()
@@ -420,22 +452,35 @@ def actualizar_servicio(servicio_id):
             return jsonify({'error': 'No autorizado para editar este servicio'}), 403
 
         campos, valores = [], []
+
         if 'nombre' in data:
-            campos.append('nombre = %s'); valores.append(str(data['nombre']).strip())
+            ok, val = validar_longitud(data['nombre'], 'Nombre', minimo=1, maximo=100)
+            if not ok:
+                conn.close()
+                return jsonify({'error': val}), 400
+            campos.append('nombre = %s'); valores.append(val.strip())
+
         if 'duracion_minutos' in data:
-            dur = int(data['duracion_minutos'])
-            if dur <= 0:
+            ok, val = validar_entero(data['duracion_minutos'], 'Duración', minimo=5, maximo=480)
+            if not ok:
                 conn.close()
-                return jsonify({'error': 'Duración inválida'}), 400
-            campos.append('duracion_minutos = %s'); valores.append(dur)
+                return jsonify({'error': val}), 400
+            campos.append('duracion_minutos = %s'); valores.append(val)
+
         if 'precio' in data:
-            precio = float(data['precio'])
-            if precio < 0:
+            ok, val = validar_decimal(data['precio'], 'Precio', minimo=0, maximo=100000000)
+            if not ok:
                 conn.close()
-                return jsonify({'error': 'Precio inválido'}), 400
-            campos.append('precio = %s'); valores.append(precio)
+                return jsonify({'error': val}), 400
+            campos.append('precio = %s'); valores.append(val)
+
         if 'descripcion' in data:
-            campos.append('descripcion = %s'); valores.append(str(data['descripcion']).strip())
+            ok, val = validar_longitud(data['descripcion'], 'Descripción', minimo=0, maximo=200)
+            if not ok:
+                conn.close()
+                return jsonify({'error': val}), 400
+            campos.append('descripcion = %s'); valores.append(val.strip())
+
         if 'activo' in data:
             campos.append('activo = %s'); valores.append(1 if data['activo'] else 0)
 
@@ -508,14 +553,25 @@ def crear_item_catalogo():
     """Crea un nuevo item en el catálogo."""
     user, error, code = requiere_admin()
     if error: return error, code
-    data = request.json
+    data = request.json or {}
     tipo = data.get('tipo', '').strip()
     archivo = data.get('archivo', '').strip()
     nombre = data.get('nombre', '').strip()
     if tipo not in ('producto', 'estilo'):
         return jsonify({'error': 'Tipo debe ser producto o estilo'}), 400
-    if not archivo or not nombre:
-        return jsonify({'error': 'Archivo y nombre obligatorios'}), 400
+
+    ok, archivo = validar_longitud(archivo, 'Archivo', minimo=1, maximo=100)
+    if not ok:
+        return jsonify({'error': archivo}), 400
+
+    ok, nombre = validar_longitud(nombre, 'Nombre', minimo=1, maximo=100)
+    if not ok:
+        return jsonify({'error': nombre}), 400
+
+    ok, orden = validar_entero(data.get('orden', 0), 'Orden', minimo=0, maximo=999)
+    if not ok:
+        return jsonify({'error': orden}), 400
+
     try:
         conn = get_db()
         cursor = conn.cursor()
@@ -523,7 +579,7 @@ def crear_item_catalogo():
             INSERT INTO catalogo (tipo, archivo, nombre, descripcion, precio, orden, activo)
             VALUES (%s, %s, %s, %s, %s, %s, 1) RETURNING id
         ''', (tipo, archivo, nombre, data.get('descripcion', '').strip(),
-              data.get('precio', '').strip(), int(data.get('orden', 0))))
+              data.get('precio', '').strip(), orden))
         nuevo_id = cursor.fetchone()['id']
         conn.commit()
         conn.close()
@@ -549,7 +605,11 @@ def actualizar_item_catalogo(item_id):
             if campo in data:
                 campos.append(f'{campo} = %s'); valores.append(str(data[campo]).strip())
         if 'orden' in data:
-            campos.append('orden = %s'); valores.append(int(data['orden']))
+            ok, val = validar_entero(data['orden'], 'Orden', minimo=0, maximo=999)
+            if not ok:
+                conn.close()
+                return jsonify({'error': val}), 400
+            campos.append('orden = %s'); valores.append(val)
         if 'activo' in data:
             campos.append('activo = %s'); valores.append(1 if data['activo'] else 0)
         if not campos:

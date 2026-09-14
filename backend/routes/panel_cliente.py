@@ -1,7 +1,8 @@
 from flask import Blueprint, request, jsonify
 from datetime import datetime
 from database import get_db
-from helpers import requiere_autenticacion, ahora_ve, actualizar_citas_pasadas, respuesta_error
+ from helpers import (requiere_autenticacion, ahora_ve, actualizar_citas_pasadas,
+                     respuesta_error, validar_fecha)
 from notificaciones import enviar_telegram
 from config import ZONA_HORARIA_VE
 
@@ -243,12 +244,20 @@ def eliminar_cita_permanente(cita_id):
 def bloquear_dias():
     user, error, code = requiere_autenticacion()
     if error: return error, code
-    data = request.json
-    fecha_inicio = data.get('fecha_inicio')
-    fecha_fin = data.get('fecha_fin')
-    motivo = data.get('motivo', 'Descanso')
-    if not fecha_inicio or not fecha_fin:
-        return jsonify({'error': 'Faltan fechas'}), 400
+    data = request.json or {}
+
+    ok, fecha_inicio = validar_fecha(data.get('fecha_inicio'), 'Fecha inicio')
+    if not ok:
+        return jsonify({'error': fecha_inicio}), 400
+
+    ok, fecha_fin = validar_fecha(data.get('fecha_fin'), 'Fecha fin')
+    if not ok:
+        return jsonify({'error': fecha_fin}), 400
+
+    if fecha_fin < fecha_inicio:
+        return jsonify({'error': 'La fecha fin no puede ser anterior a la fecha inicio'}), 400
+
+    motivo = (data.get('motivo') or 'Descanso').strip()[:100]
     
     if user['rol'] == 'admin':
         barbero_id = int(data.get('barbero_id', 1))

@@ -72,3 +72,74 @@ def respuesta_error(e, contexto):
     print(f"[ERROR] {contexto}: {type(e).__name__} - {e}")
     traceback.print_exc()
     return jsonify({'error': 'Error interno del servidor'}), 500
+
+def validar_entero(valor, nombre, minimo=None, maximo=None):
+    """Valida que un valor sea entero dentro de un rango. Devuelve (ok, valor_o_error)."""
+    try:
+        n = int(valor)
+    except (ValueError, TypeError):
+        return False, f'{nombre} debe ser un número entero'
+    if minimo is not None and n < minimo:
+        return False, f'{nombre} debe ser mayor o igual a {minimo}'
+    if maximo is not None and n > maximo:
+        return False, f'{nombre} debe ser menor o igual a {maximo}'
+    return True, n
+
+
+def validar_decimal(valor, nombre, minimo=None, maximo=None):
+    """Valida que un valor sea decimal dentro de un rango."""
+    try:
+        n = float(valor)
+    except (ValueError, TypeError):
+        return False, f'{nombre} debe ser un número'
+    if minimo is not None and n < minimo:
+        return False, f'{nombre} debe ser mayor o igual a {minimo}'
+    if maximo is not None and n > maximo:
+        return False, f'{nombre} debe ser menor o igual a {maximo}'
+    return True, n
+
+
+def validar_hora(valor, nombre, opcional=False):
+    """Valida que un valor sea una hora en formato HH:MM."""
+    if not valor:
+        if opcional:
+            return True, None
+        return False, f'{nombre} es obligatorio'
+    s = str(valor).strip()
+    try:
+        partes = s.split(':')
+        if len(partes) != 2:
+            raise ValueError
+        h, m = int(partes[0]), int(partes[1])
+        if not (0 <= h <= 23 and 0 <= m <= 59):
+            raise ValueError
+        return True, f'{h:02d}:{m:02d}'
+    except (ValueError, TypeError):
+        return False, f'{nombre} debe estar en formato HH:MM (ej: 08:30)'
+
+
+def validar_fecha(valor, nombre, opcional=False):
+    """Valida que un valor sea una fecha en formato YYYY-MM-DD."""
+    if not valor:
+        if opcional:
+            return True, None
+        return False, f'{nombre} es obligatorio'
+    s = str(valor).strip()
+    from datetime import datetime
+    try:
+        datetime.strptime(s, '%Y-%m-%d')
+        return True, s
+    except (ValueError, TypeError):
+        return False, f'{nombre} debe estar en formato YYYY-MM-DD'
+
+
+def validar_longitud(valor, nombre, minimo=0, maximo=255):
+    """Valida la longitud de un texto."""
+    if valor is None:
+        valor = ''
+    s = str(valor)
+    if len(s) < minimo:
+        return False, f'{nombre} debe tener al menos {minimo} caracteres'
+    if len(s) > maximo:
+        return False, f'{nombre} debe tener máximo {maximo} caracteres'
+    return True, s

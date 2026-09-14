@@ -1,7 +1,8 @@
 from flask import Blueprint, request, jsonify
 from datetime import datetime, timedelta
 from database import get_db
-from helpers import ahora_ve, obtener_usuario_actual, respuesta_error
+from helpers import (ahora_ve, obtener_usuario_actual, respuesta_error,
+                     validar_entero, validar_longitud)
 from notificaciones import enviar_telegram
 from disponibilidad import calcular_huecos_libres, obtener_duracion_servicio
 from config import ZONA_HORARIA_VE, DIAS_ES
@@ -114,20 +115,26 @@ def reservar():
     try:
         fecha = data['fecha']
         hora_inicio = data['hora_inicio']
-        servicio_id = int(data['servicio_id'])
-        barbero_id = int(data.get('barbero_id', 0))
-        nombre = data['nombre'].strip()
-        telefono = data.get('telefono', '').strip()
-        notas = data.get('notas', '').strip()
 
-        if not nombre:
-            return jsonify({'error': 'El nombre es obligatorio'}), 400
-        if len(nombre) > 50:
-            return jsonify({'error': 'Nombre demasiado largo (máximo 50 caracteres)'}), 400
-        if len(telefono) > 20:
-            return jsonify({'error': 'Teléfono demasiado largo (máximo 20 caracteres)'}), 400
-        if len(notas) > 500:
-            return jsonify({'error': 'Notas demasiado largas (máximo 500 caracteres)'}), 400
+        ok, servicio_id = validar_entero(data['servicio_id'], 'Servicio', minimo=1)
+        if not ok:
+            return jsonify({'error': servicio_id}), 400
+
+        ok, barbero_id = validar_entero(data.get('barbero_id', 0), 'Barbero', minimo=0)
+        if not ok:
+            return jsonify({'error': barbero_id}), 400
+
+        ok, nombre = validar_longitud(data['nombre'].strip(), 'Nombre', minimo=2, maximo=50)
+        if not ok:
+            return jsonify({'error': nombre}), 400
+
+        ok, telefono = validar_longitud(data.get('telefono', '').strip(), 'Teléfono', minimo=0, maximo=20)
+        if not ok:
+            return jsonify({'error': telefono}), 400
+
+        ok, notas = validar_longitud(data.get('notas', '').strip(), 'Notas', minimo=0, maximo=500)
+        if not ok:
+            return jsonify({'error': notas}), 400
 
         conn = get_db()
         cursor = conn.cursor()
