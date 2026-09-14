@@ -55,7 +55,7 @@ def crear_barbero():
         hora_fin = data.get('hora_fin', '17:00')
         pausa_inicio = data.get('pausa_inicio') or None
         pausa_fin = data.get('pausa_fin') or None
-        
+
         telegram_chat_id = (data.get('telegram_chat_id') or '').strip() or None
         cursor.execute('''
             INSERT INTO barberos (nombre, telefono, email, telegram_chat_id, hora_inicio, hora_fin, pausa_inicio, pausa_fin, dias_trabajo)
@@ -64,7 +64,7 @@ def crear_barbero():
               data.get('email', '').strip(), telegram_chat_id, hora_inicio, hora_fin,
               pausa_inicio, pausa_fin, json.dumps(dias)))
         nuevo_id = cursor.fetchone()['id']
-        
+
         # Generar usuario automático
         username_base = normalizar_username(data['nombre'])
         username = username_base
@@ -81,7 +81,7 @@ def crear_barbero():
             INSERT INTO usuarios (username, password_hash, rol, barbero_id)
             VALUES (%s, %s, 'barbero', %s)
         ''', (username, pwd_hash, nuevo_id))
-        
+
         # Crear servicios por defecto para este barbero
         cursor.execute('''
             INSERT INTO servicios (barbero_id, nombre, duracion_minutos, precio) VALUES
@@ -89,7 +89,7 @@ def crear_barbero():
             (%s, 'Barba', 30, 15000),
             (%s, 'Combo (Corte + Barba)', 75, 30000)
         ''', (nuevo_id, nuevo_id, nuevo_id))
-        
+
         conn.commit()
         conn.close()
 
@@ -118,10 +118,10 @@ def actualizar_barbero(barbero_id):
         if not barbero_actual:
             conn.close()
             return jsonify({'error': 'Barbero no encontrado'}), 404
-        
+
         nombre_anterior = barbero_actual['nombre']
         nombre_nuevo = data.get('nombre', nombre_anterior).strip()
-        
+
         campos, valores = [], []
         if 'nombre' in data:
             campos.append('nombre = %s'); valores.append(nombre_nuevo)
@@ -147,11 +147,11 @@ def actualizar_barbero(barbero_id):
             campos.append('dias_trabajo = %s'); valores.append(json.dumps(data['dias_trabajo']))
         if 'activo' in data:
             campos.append('activo = %s'); valores.append(1 if data['activo'] else 0)
-        
+
         if campos:
             valores.append(barbero_id)
             cursor.execute(f"UPDATE barberos SET {', '.join(campos)} WHERE id = %s", valores)
-        
+
         # Regenerar usuario si cambió el nombre
         username_gen = password_gen = None
         if nombre_nuevo != nombre_anterior:
@@ -177,10 +177,10 @@ def actualizar_barbero(barbero_id):
                 ''', (username, pwd_hash, barbero_id))
             username_gen = username
             password_gen = password
-        
+
         conn.commit()
         conn.close()
-        
+
         respuesta = {'mensaje': 'Barbero actualizado'}
         if username_gen:
             respuesta['mensaje'] += f'. Usuario: {username_gen} / Contraseña: {password_gen}'
@@ -203,10 +203,10 @@ def eliminar_barbero(barbero_id):
         if not barbero:
             conn.close()
             return jsonify({'error': 'Barbero no encontrado o ya desactivado'}), 404
-        
+
         cursor.execute('UPDATE barberos SET activo = 0 WHERE id = %s', (barbero_id,))
         cursor.execute('UPDATE usuarios SET activo = 0 WHERE barbero_id = %s', (barbero_id,))
-        
+
         hoy = ahora_ve().strftime('%Y-%m-%d')
         cursor.execute('''
             UPDATE citas SET estado = 'cancelada_por_barbero'
@@ -216,9 +216,9 @@ def eliminar_barbero(barbero_id):
         canceladas = cursor.rowcount
         conn.commit()
         conn.close()
-        
+
         enviar_telegram(f"🚫 <b>Barbero desactivado</b>\n{barbero['nombre']}\nCitas canceladas: {canceladas}")
-        
+
         return jsonify({
             'mensaje': f'Barbero "{barbero["nombre"]}" desactivado. {canceladas} citas canceladas.',
             'citas_canceladas': canceladas
@@ -242,15 +242,15 @@ def reactivar_barbero(barbero_id):
         if barbero['activo'] == 1:
             conn.close()
             return jsonify({'error': 'El barbero ya está activo'}), 400
-        
+
         # Reactivar barbero y su usuario
         cursor.execute('UPDATE barberos SET activo = 1 WHERE id = %s', (barbero_id,))
         cursor.execute('UPDATE usuarios SET activo = 1 WHERE barbero_id = %s', (barbero_id,))
         conn.commit()
         conn.close()
-        
+
         enviar_telegram(f"✅ <b>Barbero reactivado</b>\n{barbero['nombre']}")
-        
+
         return jsonify({
             'mensaje': f'Barbero "{barbero["nombre"]}" reactivado exitosamente'
         })
@@ -271,7 +271,7 @@ def eliminar_barbero_permanente(barbero_id):
         if not barbero:
             conn.close()
             return jsonify({'error': 'Barbero no encontrado'}), 404
-        
+
         # Verificar citas futuras activas
         hoy = ahora_ve().strftime('%Y-%m-%d')
         cursor.execute('''
@@ -285,16 +285,15 @@ def eliminar_barbero_permanente(barbero_id):
             return jsonify({
                 'error': f'Tiene {citas_futuras} citas activas. Cancélalas primero.'
             }), 400
-        
+
         # Verificar si tiene citas históricas
         cursor.execute('SELECT COUNT(*) as cnt FROM citas WHERE barbero_id = %s', (barbero_id,))
         citas_historicas = cursor.fetchone()['cnt']
-        
+
         if citas_historicas > 0:
             # Tiene historial: solo desactivar (no borrar)
             cursor.execute('UPDATE barberos SET activo = 0 WHERE id = %s', (barbero_id,))
             cursor.execute('UPDATE usuarios SET activo = 0 WHERE barbero_id = %s', (barbero_id,))
-            # Desactivar sus servicios (no borrar)
             cursor.execute('UPDATE servicios SET activo = 0 WHERE barbero_id = %s', (barbero_id,))
             conn.commit()
             conn.close()
@@ -305,29 +304,22 @@ def eliminar_barbero_permanente(barbero_id):
             })
         else:
             # Sin historial: borrar todo
-            # Borrar de barbero_servicios (tabla vieja)
             try:
                 cursor.execute('DELETE FROM barbero_servicios WHERE barbero_id = %s', (barbero_id,))
             except Exception:
                 pass
-            
-            # Borrar servicios del barbero
             try:
                 cursor.execute('DELETE FROM servicios WHERE barbero_id = %s', (barbero_id,))
             except Exception:
                 pass
-            
-            # Borrar de otras tablas relacionadas
             try:
                 cursor.execute('DELETE FROM usuarios WHERE barbero_id = %s', (barbero_id,))
             except Exception:
                 pass
-            
             try:
                 cursor.execute('DELETE FROM bloqueos WHERE barbero_id = %s', (barbero_id,))
             except Exception:
                 pass
-            
             try:
                 cursor.execute('DELETE FROM barberos WHERE id = %s', (barbero_id,))
             except Exception:
@@ -339,7 +331,7 @@ def eliminar_barbero_permanente(barbero_id):
             return jsonify({'mensaje': f'Barbero "{barbero["nombre"]}" eliminado permanentemente'})
     except Exception as e:
         return respuesta_error(e, 'admin')
-            
+
 
 # ========== SERVICIOS (por barbero) ==========
 
@@ -349,7 +341,7 @@ def servicios_admin():
     user, error, code = requiere_autenticacion()
     if error: return error, code
     barbero_id = request.args.get('barbero_id', 0, type=int)
-    
+
     # Si es barbero, solo puede ver los suyos
     if user['rol'] == 'barbero' and user['barbero_id']:
         barbero_id = user['barbero_id']
@@ -382,12 +374,12 @@ def crear_servicio():
     duracion = int(data.get('duracion_minutos', 0))
     precio = float(data.get('precio', 0))
     barbero_id = int(data.get('barbero_id', 0))
-    
+
     if user['rol'] == 'barbero' and user['barbero_id']:
         barbero_id = user['barbero_id']
     if barbero_id == 0:
         return jsonify({'error': 'Debe especificar un barbero'}), 400
-    
+
     if not nombre:
         return jsonify({'error': 'El nombre es obligatorio'}), 400
     if duracion <= 0:
@@ -422,11 +414,11 @@ def actualizar_servicio(servicio_id):
         if not srv:
             conn.close()
             return jsonify({'error': 'Servicio no encontrado'}), 404
-        
+
         if user['rol'] == 'barbero' and srv['barbero_id'] != user['barbero_id']:
             conn.close()
             return jsonify({'error': 'No autorizado para editar este servicio'}), 403
-        
+
         campos, valores = [], []
         if 'nombre' in data:
             campos.append('nombre = %s'); valores.append(str(data['nombre']).strip())
@@ -446,11 +438,11 @@ def actualizar_servicio(servicio_id):
             campos.append('descripcion = %s'); valores.append(str(data['descripcion']).strip())
         if 'activo' in data:
             campos.append('activo = %s'); valores.append(1 if data['activo'] else 0)
-        
+
         if not campos:
             conn.close()
             return jsonify({'error': 'Sin campos para actualizar'}), 400
-        
+
         valores.append(servicio_id)
         cursor.execute(f"UPDATE servicios SET {', '.join(campos)} WHERE id = %s", valores)
         conn.commit()
@@ -475,7 +467,7 @@ def eliminar_servicio(servicio_id):
         if user['rol'] == 'barbero' and srv['barbero_id'] != user['barbero_id']:
             conn.close()
             return jsonify({'error': 'No autorizado'}), 403
-        
+
         cursor.execute('SELECT COUNT(*) as cnt FROM citas WHERE servicio_id = %s', (servicio_id,))
         cnt = cursor.fetchone()['cnt']
         if cnt > 0:
@@ -590,30 +582,29 @@ def eliminar_item_catalogo(item_id):
         return respuesta_error(e, 'admin')
 
 # ========== BACKUP ==========
+
 @admin_bp.route('/api/admin/backup', methods=['GET'])
 def backup_db():
     """Genera un backup completo de la base de datos en JSON."""
     import os
     token = request.args.get('token', '')
     TOKEN_BACKUP = os.environ.get('BACKUP_TOKEN', 'backup2026')
-    # Token especial para cron jobs, o sesión de admin
     user, _, _ = requiere_autenticacion()
     if token != TOKEN_BACKUP and not (user and user['rol'] == 'admin'):
         return jsonify({'error': 'No autorizado'}), 403
     try:
-        from datetime import datetime
         conn = get_db()
         cursor = conn.cursor()
-        
+
         backup = {
             'fecha_backup': ahora_ve().isoformat(),
             'version': '1.0',
             'datos': {}
         }
-        
-        tablas = ['barberos', 'servicios', 'clientes', 'citas', 'bloqueos', 
+
+        tablas = ['barberos', 'servicios', 'clientes', 'citas', 'bloqueos',
                   'usuarios', 'catalogo', 'logs_notificaciones']
-        
+
         for tabla in tablas:
             try:
                 cursor.execute(f'SELECT * FROM {tabla}')
@@ -622,15 +613,15 @@ def backup_db():
             except Exception as e:
                 backup['datos'][tabla] = []
                 backup['datos'][f'{tabla}_error'] = str(e)
-        
+
         conn.close()
-        
+
         from flask import Response
         import json as json_lib
-        
+
         json_str = json_lib.dumps(backup, indent=2, default=str, ensure_ascii=False)
         fecha = ahora_ve().strftime('%Y-%m-%d_%H-%M-%S')
-        
+
         if request.args.get('descargar') == 'si':
             return Response(
                 json_str,
@@ -639,7 +630,7 @@ def backup_db():
                     'Content-Disposition': f'attachment; filename=backup_barberia_{fecha}.json'
                 }
             )
-        
+
         return jsonify({
             'mensaje': '✅ Backup generado',
             'fecha': fecha,
@@ -657,22 +648,21 @@ def backup_telegram():
     if token != TOKEN_BACKUP:
         return jsonify({'error': 'Token inválido'}), 403
     try:
-        from datetime import datetime
         from notificaciones import enviar_telegram_documento
         import json as json_lib
-        
+
         conn = get_db()
         cursor = conn.cursor()
-        
+
         backup = {
             'fecha_backup': ahora_ve().isoformat(),
             'version': '1.0',
             'datos': {}
         }
-        
-        tablas = ['barberos', 'servicios', 'clientes', 'citas', 'bloqueos', 
+
+        tablas = ['barberos', 'servicios', 'clientes', 'citas', 'bloqueos',
                   'usuarios', 'catalogo', 'logs_notificaciones']
-        
+
         totales = {}
         for tabla in tablas:
             try:
@@ -683,20 +673,20 @@ def backup_telegram():
             except Exception as e:
                 backup['datos'][tabla] = []
                 totales[tabla] = f"error: {e}"
-        
+
         conn.close()
-        
+
         json_str = json_lib.dumps(backup, indent=2, default=str, ensure_ascii=False)
         fecha = ahora_ve().strftime('%Y-%m-%d_%H-%M')
         nombre_archivo = f'backup_barberia_{fecha}.json'
-        
+
         caption = (
             f"📦 <b>Backup Gocho Barber</b>\n"
             f"📅 {ahora_ve().strftime('%d/%m/%Y %H:%M')}\n\n"
             + "\n".join([f"• {k}: {v}" for k, v in totales.items()])
         )
         enviado = enviar_telegram_documento(nombre_archivo, json_str, caption)
-        
+
         return jsonify({
             'mensaje': '✅ Backup enviado por Telegram' if enviado else '❌ Error enviando',
             'enviado': enviado,
@@ -705,7 +695,9 @@ def backup_telegram():
         })
     except Exception as e:
         return respuesta_error(e, 'admin')
-    
+
+# ========== ESTADISTICAS ==========
+
 @admin_bp.route('/api/admin/estadisticas', methods=['GET'])
 def estadisticas():
     """Estadísticas globales (admin) o solo del barbero (si es barbero)."""
@@ -713,43 +705,41 @@ def estadisticas():
     if error: return error, code
     try:
         barbero_id = request.args.get('barbero_id', 0, type=int)
-        
-        # Si es barbero, forzar su barbero_id
+
         if user['rol'] == 'barbero':
             barbero_id = user['barbero_id']
-        
+
         conn = get_db()
         cursor = conn.cursor()
         hoy = ahora_ve()
-        
-        meses_es = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 
+
+        meses_es = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun',
                     'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
-        
-        # Filtro adicional según barbero
+
         filtro_barbero = ''
         params_barbero = []
         if barbero_id > 0:
             filtro_barbero = ' AND c.barbero_id = %s'
             params_barbero = [barbero_id]
-        
+
         # ========== 1. CITAS E INGRESOS POR MES ==========
         citas_mes = []
         ingresos_mes = []
         etiquetas_mes = []
-        
+
         for i in range(5, -1, -1):
             mes_actual = hoy.month - i
             anio_actual = hoy.year
             while mes_actual <= 0:
                 mes_actual += 12
                 anio_actual -= 1
-            
+
             primer_dia = f"{anio_actual}-{mes_actual:02d}-01"
             if mes_actual == 12:
                 ultimo_dia = f"{anio_actual}-12-31"
             else:
                 ultimo_dia = f"{anio_actual}-{mes_actual+1:02d}-01"
-            
+
             query_citas = '''
                 SELECT COUNT(*) as cnt FROM citas c
                 WHERE c.fecha >= %s AND c.fecha < %s
@@ -758,7 +748,7 @@ def estadisticas():
             ''' + filtro_barbero
             cursor.execute(query_citas, (primer_dia, ultimo_dia) + tuple(params_barbero))
             citas_mes.append(cursor.fetchone()['cnt'])
-            
+
             query_ingresos = '''
                 SELECT COALESCE(SUM(s.precio), 0) as total
                 FROM citas c
@@ -770,10 +760,9 @@ def estadisticas():
             cursor.execute(query_ingresos, (primer_dia, ultimo_dia) + tuple(params_barbero))
             ingresos_mes.append(float(cursor.fetchone()['total']))
             etiquetas_mes.append(f"{meses_es[mes_actual-1]} {anio_actual}")
-        
+
         # ========== 2. CITAS POR BARBERO ==========
         if barbero_id > 0:
-            # Solo el barbero indicado
             cursor.execute('''
                 SELECT b.nombre, COUNT(c.id) as total
                 FROM barberos b
@@ -791,7 +780,7 @@ def estadisticas():
                 ORDER BY total DESC
             ''')
         barberos_data = cursor.fetchall()
-        
+
         # ========== 3. TOP 5 CLIENTES ==========
         query_clientes = '''
             SELECT cl.nombre, cl.telefono, COUNT(c.id) as total_citas
@@ -806,9 +795,10 @@ def estadisticas():
         '''
         cursor.execute(query_clientes, tuple(params_barbero))
         clientes_top = [dict(c) for c in cursor.fetchall()]
-        
+
         # ========== 4. RESUMEN ==========
         primer_dia_mes = f"{hoy.year}-{hoy.month:02d}-01"
+
         query_resumen = '''
             SELECT COUNT(*) as cnt FROM citas c
             WHERE c.fecha >= %s
@@ -817,7 +807,8 @@ def estadisticas():
         ''' + filtro_barbero
         cursor.execute(query_resumen, (primer_dia_mes,) + tuple(params_barbero))
         citas_mes_actual = cursor.fetchone()['cnt']
-                # Ingresos del mes actual
+
+        # Ingresos del mes actual
         query_ing_mes = '''
             SELECT COALESCE(SUM(s.precio), 0) as total
             FROM citas c
@@ -828,7 +819,7 @@ def estadisticas():
         ''' + filtro_barbero
         cursor.execute(query_ing_mes, (primer_dia_mes,) + tuple(params_barbero))
         ingresos_mes_actual = float(cursor.fetchone()['total'])
-        
+
         query_total = '''
             SELECT COUNT(*) as cnt FROM citas c
             WHERE c.estado NOT IN ('cancelada_por_cliente', 'cancelada_por_barbero', 
@@ -840,8 +831,7 @@ def estadisticas():
         else:
             cursor.execute(query_total)
         citas_totales = cursor.fetchone()['cnt']
-        
-        # Clientes únicos (solo los que tienen al menos una cita válida)
+
         if barbero_id > 0:
             cursor.execute('''
                 SELECT COUNT(DISTINCT c.cliente_id) as cnt
@@ -858,7 +848,7 @@ def estadisticas():
                                        'cancelada_por_sistema', 'expirada')
             ''')
         total_clientes = cursor.fetchone()['cnt']
-        
+
         query_ing_total = '''
             SELECT COALESCE(SUM(s.precio), 0) as total
             FROM citas c
@@ -868,9 +858,9 @@ def estadisticas():
         ''' + filtro_barbero
         cursor.execute(query_ing_total, tuple(params_barbero))
         ingresos_totales = float(cursor.fetchone()['total'])
-        
+
         conn.close()
-        
+
         return jsonify({
             'citas_mes': {'etiquetas': etiquetas_mes, 'valores': citas_mes},
             'ingresos_mes': {'etiquetas': etiquetas_mes, 'valores': ingresos_mes},
@@ -889,32 +879,31 @@ def estadisticas():
         })
     except Exception as e:
         return respuesta_error(e, 'admin')
-    
+
 @admin_bp.route('/api/admin/estadisticas-detalle', methods=['GET'])
 def estadisticas_detalle():
     """Detalle para el modal de estadísticas."""
     user, error, code = requiere_autenticacion()
     if error: return error, code
     try:
-        tipo = request.args.get('tipo', '')  # citas_mes, ingresos, barberos, clientes
+        tipo = request.args.get('tipo', '')
         barbero_id = request.args.get('barbero_id', 0, type=int)
-        
+
         if user['rol'] == 'barbero':
             barbero_id = user['barbero_id']
-        
+
         conn = get_db()
         cursor = conn.cursor()
-        
+
         resultado = {'titulo': '', 'items': []}
-        
+
         filtro_barbero = ''
         params_barbero = []
         if barbero_id > 0:
             filtro_barbero = ' AND c.barbero_id = %s'
             params_barbero = [barbero_id]
-        
+
         if tipo == 'citas_mes':
-            # Citas del mes actual
             hoy = ahora_ve()
             primer_dia = f"{hoy.year}-{hoy.month:02d}-01"
             query = '''
@@ -933,7 +922,7 @@ def estadisticas_detalle():
             cursor.execute(query, (primer_dia,) + tuple(params_barbero))
             resultado['titulo'] = f'Citas del mes actual ({hoy.strftime("%B %Y")})'
             resultado['items'] = [dict(r) for r in cursor.fetchall()]
-        
+
         elif tipo == 'citas_totales':
             query = '''
                 SELECT c.fecha, c.hora_inicio, c.estado, 
@@ -950,7 +939,7 @@ def estadisticas_detalle():
             cursor.execute(query, tuple(params_barbero))
             resultado['titulo'] = 'Todas las citas (últimas 100)'
             resultado['items'] = [dict(r) for r in cursor.fetchall()]
-        
+
         elif tipo == 'clientes':
             query = '''
                 SELECT cl.nombre, cl.telefono, cl.email,
@@ -968,9 +957,8 @@ def estadisticas_detalle():
             cursor.execute(query, tuple(params_barbero))
             resultado['titulo'] = 'Todos los clientes (por citas)'
             resultado['items'] = [dict(r) for r in cursor.fetchall()]
-        
+
         elif tipo == 'ingresos':
-            # Detalle de ingresos por servicio
             query = '''
                 SELECT s.nombre as servicio,
                        COUNT(c.id) as cantidad,
@@ -986,6 +974,7 @@ def estadisticas_detalle():
             cursor.execute(query, tuple(params_barbero))
             resultado['titulo'] = 'Ingresos por servicio'
             resultado['items'] = [dict(r) for r in cursor.fetchall()]
+
         elif tipo == 'ingresos_mes':
             hoy = ahora_ve()
             primer_dia = f"{hoy.year}-{hoy.month:02d}-01"
@@ -1005,7 +994,7 @@ def estadisticas_detalle():
             cursor.execute(query, (primer_dia,) + tuple(params_barbero))
             resultado['titulo'] = 'Ingresos del mes por servicio'
             resultado['items'] = [dict(r) for r in cursor.fetchall()]
-        
+
         conn.close()
         return jsonify(resultado)
     except Exception as e:
