@@ -126,7 +126,7 @@
 
             <!-- PENDIENTES -->
             <div id="tabPendientes" class="panel-tab activo">
-                <h3>Solicitudes Pendientes</h3>
+                <h3>Solicitudes Pendientes <span id="contadorPendientes" class="contador-badge">0</span></h3>
                 <div class="filtros-container" id="filtrosPendientes">
                     <div>
                         <label>Filtrar por barbero</label>
@@ -433,6 +433,21 @@
             </div>
         </div>
     </div>
+</div>
+
+<!-- Botón volver arriba -->
+<button id="btnVolverArriba" class="btn-volver-arriba" onclick="volverArriba()" title="Volver arriba">
+    <i class="fa-solid fa-arrow-up"></i>
+</button>
+
+<!-- Indicador sin conexión -->
+<div id="indicadorSinConexion" class="indicador-sin-conexion">
+    <i class="fa-solid fa-wifi"></i> Sin conexión a internet
+</div>
+
+<!-- Barra de progreso al reservar -->
+<div id="barraProgreso" class="barra-progreso">
+    <div class="barra-progreso-fill"></div>
 </div>
 
 <!-- Toasts -->

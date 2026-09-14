@@ -53,6 +53,106 @@ function cargarTelefonoCliente() {
     try { return localStorage.getItem('clienteTelefono') || ''; } catch (e) { return ''; }
 }
 
+// ===== FECHA HUMANA EN LISTAS =====
+function formatearFechaHumana(fechaISO) {
+    if (!fechaISO) return '';
+    try {
+        const [y, m, d] = fechaISO.split('-');
+        const meses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+        const dias = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+        const fecha = new Date(parseInt(y), parseInt(m) - 1, parseInt(d));
+        const hoy = new Date();
+        hoy.setHours(0, 0, 0, 0);
+        const fechaCmp = new Date(parseInt(y), parseInt(m) - 1, parseInt(d));
+        const diff = Math.floor((fechaCmp - hoy) / (1000 * 60 * 60 * 24));
+        let prefijo = '';
+        if (diff === 0) prefijo = 'Hoy';
+        else if (diff === 1) prefijo = 'Mañana';
+        else if (diff === -1) prefijo = 'Ayer';
+        const base = `${dias[fecha.getDay()]} ${parseInt(d)} ${meses[parseInt(m) - 1]}`;
+        return prefijo ? `${prefijo}, ${base}` : base;
+    } catch (e) {
+        return fechaISO;
+    }
+}
+
+// ===== BOTON VOLVER ARRIBA =====
+function volverArriba() {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function actualizarBotonVolverArriba() {
+    const btn = document.getElementById('btnVolverArriba');
+    if (!btn) return;
+    if (window.scrollY > 300) {
+        btn.classList.add('visible');
+    } else {
+        btn.classList.remove('visible');
+    }
+}
+
+// ===== INDICADOR SIN CONEXION =====
+function actualizarIndicadorConexion() {
+    const ind = document.getElementById('indicadorSinConexion');
+    if (!ind) return;
+    if (navigator.onLine) {
+        ind.classList.remove('visible');
+    } else {
+        ind.classList.add('visible');
+    }
+}
+window.addEventListener('online', actualizarIndicadorConexion);
+window.addEventListener('offline', actualizarIndicadorConexion);
+
+// ===== BARRA DE PROGRESO =====
+let barraProgresoTimer = null;
+function mostrarBarraProgreso() {
+    const barra = document.getElementById('barraProgreso');
+    const fill = barra?.querySelector('.barra-progreso-fill');
+    if (!barra || !fill) return;
+    barra.classList.add('activa');
+    fill.style.width = '0%';
+    setTimeout(() => fill.style.width = '30%', 50);
+    setTimeout(() => fill.style.width = '60%', 400);
+    clearTimeout(barraProgresoTimer);
+    barraProgresoTimer = setTimeout(() => fill.style.width = '90%', 800);
+}
+function ocultarBarraProgreso() {
+    const barra = document.getElementById('barraProgreso');
+    const fill = barra?.querySelector('.barra-progreso-fill');
+    if (!barra || !fill) return;
+    fill.style.width = '100%';
+    setTimeout(() => {
+        barra.classList.remove('activa');
+        fill.style.width = '0%';
+    }, 300);
+}
+
+// ===== ERROR CON BOTON RECARGAR =====
+function mostrarErrorRecargar(contenedor, mensaje = 'Error al cargar') {
+    if (!contenedor) return;
+    contenedor.innerHTML = `
+        <div class="error-recargar">
+            <i class="fa-solid fa-triangle-exclamation" style="font-size:2rem;"></i>
+            <div style="margin-top:10px;">${escaparHTML(mensaje)}</div>
+            <button onclick="location.reload()"><i class="fa-solid fa-rotate"></i> Recargar</button>
+        </div>
+    `;
+}
+
+// ===== MODO AUTOMATICO POR HORA =====
+function aplicarModoAutomatico() {
+    try {
+        if (localStorage.getItem('modo')) return;
+        const hora = new Date().getHours();
+        if (hora >= 19 || hora < 7) {
+            document.body.classList.remove('modo-claro');
+        } else {
+            document.body.classList.add('modo-claro');
+        }
+    } catch (e) {}
+}
+
 // ===== ESTADOS DE CARGA EN BOTONES =====
 function activarCargando(boton, textoOriginal = null) {
     if (!boton) return null;
@@ -270,7 +370,8 @@ function verificarSesion() {
     }
 }
 
-function logoutBarbero() {
+async function logoutBarbero() {
+    if (!await mostrarConfirmacion('¿Cerrar sesión?', 'Cerrar sesión')) return;
     cerrarSesion();
     document.getElementById('barberoLogin').style.display = 'block';
     document.getElementById('barberoContenido').style.display = 'none';
@@ -304,6 +405,7 @@ function cambiarVista(vista) {
 
 function cambiarTabCliente(tab) {
     document.querySelectorAll('#tabsCliente button').forEach(b => b.classList.remove('activo'));
+    volverArriba();
     document.querySelectorAll('#panelCliente .panel-tab').forEach(p => p.style.display = 'none');
     const b = document.querySelectorAll('#tabsCliente button');
     if (tab === 'reservar') { b[0].classList.add('activo'); document.getElementById('tabReservar').style.display = 'block'; }
@@ -314,6 +416,7 @@ function cambiarTabCliente(tab) {
 
 function cambiarTabBarbero(tab) {
     document.querySelectorAll('#tabsBarbero button').forEach(b => b.classList.remove('activo'));
+    volverArriba();
     document.querySelectorAll('#barberoContenido .panel-tab').forEach(p => p.style.display = 'none');
     const b = document.querySelectorAll('#tabsBarbero button');
     const tabsNombres = Array.from(b).map(btn => btn.textContent.trim());
@@ -460,6 +563,7 @@ async function reservar() {
     if (!servicio) { mostrarToast('Selecciona servicio', 'error'); desactivarCargando(btnReservar); return; }
 
     reservandoEnProceso = true;
+    mostrarBarraProgreso();
     const msg = document.getElementById('mensajeReserva');
     msg.className = 'mensaje info';
     msg.textContent = 'Procesando...';
@@ -507,6 +611,7 @@ async function reservar() {
     } finally {
         reservandoEnProceso = false;
         desactivarCargando(btnReservar);
+        ocultarBarraProgreso();
     }
 }
 
@@ -564,7 +669,7 @@ async function consultarCitas() {
             div.innerHTML = `
                 <div class="info">
                     ${avisoCancelada}
-                    <div class="fecha-hora">${escaparHTML(ct.fecha)} - ${escaparHTML(ct.hora_inicio)}</div>
+                    <div class="fecha-hora">${escaparHTML(ct.fecha)} - ${escaparHTML(ct.hora_inicio)} <span class="fecha-humana">${formatearFechaHumana(ct.fecha)}</span></div>
                     <div class="servicio">${escaparHTML(ct.servicio)}</div>
                     <div class="barbero-info">Barbero: ${escaparHTML(ct.barbero || 'N/A')}</div>
                 </div>
@@ -621,6 +726,14 @@ async function cargarPendientes() {
             return;
         }
         const citas = await res.json();
+
+        // Actualizar contador
+        const contador = document.getElementById('contadorPendientes');
+        if (contador) {
+            contador.textContent = citas ? citas.length : 0;
+            contador.dataset.count = citas ? citas.length : 0;
+        }
+
         c.innerHTML = '';
         if (!citas || !citas.length) { c.innerHTML = '<div class="sin-huecos">No hay pendientes.</div>'; return; }
         citas.forEach(ct => {
@@ -630,7 +743,7 @@ async function cargarPendientes() {
             if (esAdmin()) botonElim = `<button class="btn-danger" style="background:#5a1a1a;" onclick="eliminarCitaPermanente(${ct.id})"><i class="fa-solid fa-trash"></i> Eliminar</button>`;
             div.innerHTML = `
                 <div class="info">
-                    <div class="fecha-hora">${escaparHTML(ct.fecha)} - ${escaparHTML(ct.hora_inicio)}</div>
+                    <div class="fecha-hora">${escaparHTML(ct.fecha)} - ${escaparHTML(ct.hora_inicio)} <span class="fecha-humana">${formatearFechaHumana(ct.fecha)}</span></div>
                     <div class="servicio">${escaparHTML(ct.servicio)} (${escaparHTML(ct.tipo_reserva)})</div>
                     <div class="cliente">${escaparHTML(ct.cliente)} - ${escaparHTML(ct.telefono || 'N/A')}</div>
                     <div class="barbero-info">Barbero: ${escaparHTML(ct.barbero)}</div>
@@ -736,7 +849,7 @@ async function cargarHistorial() {
             if (esAdmin()) botones += `<button class="btn-danger" style="background:#5a1a1a;" onclick="eliminarCitaPermanente(${ct.id})"><i class="fa-solid fa-trash"></i> Eliminar</button>`;
             div.innerHTML = `
                 <div class="info">
-                    <div class="fecha-hora">${escaparHTML(ct.fecha)} - ${escaparHTML(ct.hora_inicio)}</div>
+                    <div class="fecha-hora">${escaparHTML(ct.fecha)} - ${escaparHTML(ct.hora_inicio)} <span class="fecha-humana">${formatearFechaHumana(ct.fecha)}</span></div>
                     <div class="servicio">${escaparHTML(ct.servicio)} - ${escaparHTML(ct.cliente)}</div>
                     <div class="barbero-info">Barbero: ${escaparHTML(ct.barbero || 'N/A')}</div>
                 </div>
@@ -2083,8 +2196,12 @@ document.addEventListener('DOMContentLoaded', () => {
 // ===== INICIALIZACIÓN =====
 document.addEventListener('DOMContentLoaded', function() {
     cargarModo();
+    aplicarModoAutomatico();
     cargarSesion();
     actualizarUISegunRol();
+    actualizarIndicadorConexion();
+    window.addEventListener('scroll', actualizarBotonVolverArriba);
+    actualizarBotonVolverArriba();
 
     // Precargar teléfono del cliente en Mis Citas
     const telConsulta = document.getElementById('telefonoConsulta');
@@ -2160,3 +2277,6 @@ window.mostrarSkeleton = mostrarSkeleton;
 window.mostrarModalReservaExitosa = mostrarModalReservaExitosa;
 window.cerrarModalReservaExitosa = cerrarModalReservaExitosa;
 window.irAMisCitas = irAMisCitas;
+window.volverArriba = volverArriba;
+window.formatearFechaHumana = formatearFechaHumana;
+window.mostrarErrorRecargar = mostrarErrorRecargar;
