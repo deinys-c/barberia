@@ -808,6 +808,17 @@ def estadisticas():
         ''' + filtro_barbero
         cursor.execute(query_resumen, (primer_dia_mes,) + tuple(params_barbero))
         citas_mes_actual = cursor.fetchone()['cnt']
+                # Ingresos del mes actual
+        query_ing_mes = '''
+            SELECT COALESCE(SUM(s.precio), 0) as total
+            FROM citas c
+            JOIN servicios s ON c.servicio_id = s.id
+            WHERE c.fecha >= %s
+            AND c.estado NOT IN ('cancelada_por_cliente', 'cancelada_por_barbero', 
+                                 'cancelada_por_sistema', 'expirada')
+        ''' + filtro_barbero
+        cursor.execute(query_ing_mes, (primer_dia_mes,) + tuple(params_barbero))
+        ingresos_mes_actual = float(cursor.fetchone()['total'])
         
         query_total = '''
             SELECT COUNT(*) as cnt FROM citas c
@@ -863,6 +874,7 @@ def estadisticas():
                 'citas_mes_actual': citas_mes_actual,
                 'citas_totales': citas_totales,
                 'total_clientes': total_clientes,
+                'ingresos_mes_actual': ingresos_mes_actual,
                 'ingresos_totales': ingresos_totales
             }
         })
@@ -964,6 +976,25 @@ def estadisticas_detalle():
             '''
             cursor.execute(query, tuple(params_barbero))
             resultado['titulo'] = 'Ingresos por servicio'
+            resultado['items'] = [dict(r) for r in cursor.fetchall()]
+        elif tipo == 'ingresos_mes':
+            hoy = ahora_ve()
+            primer_dia = f"{hoy.year}-{hoy.month:02d}-01"
+            query = '''
+                SELECT s.nombre as servicio,
+                       COUNT(c.id) as cantidad,
+                       SUM(s.precio) as total
+                FROM citas c
+                JOIN servicios s ON c.servicio_id = s.id
+                WHERE c.fecha >= %s
+                AND c.estado NOT IN ('cancelada_por_cliente', 'cancelada_por_barbero', 
+                                       'cancelada_por_sistema', 'expirada')
+            ''' + filtro_barbero + '''
+                GROUP BY s.id, s.nombre
+                ORDER BY total DESC
+            '''
+            cursor.execute(query, (primer_dia,) + tuple(params_barbero))
+            resultado['titulo'] = 'Ingresos del mes por servicio'
             resultado['items'] = [dict(r) for r in cursor.fetchall()]
         
         conn.close()

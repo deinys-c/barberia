@@ -1271,6 +1271,7 @@ async function cargarEstadisticas() {
         document.getElementById('statCitasMes').textContent = data.resumen.citas_mes_actual;
         document.getElementById('statCitasTotal').textContent = data.resumen.citas_totales;
         document.getElementById('statClientes').textContent = data.resumen.total_clientes;
+        document.getElementById('statIngresosMes').textContent = Number(data.resumen.ingresos_mes_actual || 0).toLocaleString('es-CO') + ' COP';
         document.getElementById('statIngresos').textContent = Number(data.resumen.ingresos_totales).toLocaleString('es-CO') + ' COP';
 
         dibujarGraficoBarras('graficoCitas', data.citas_mes.etiquetas, data.citas_mes.valores, 'Citas');
@@ -1299,6 +1300,7 @@ async function cargarMisEstadisticas() {
         document.getElementById('statMisCitasMes').textContent = data.resumen.citas_mes_actual;
         document.getElementById('statMisCitasTotal').textContent = data.resumen.citas_totales;
         document.getElementById('statMisClientes').textContent = data.resumen.total_clientes;
+        document.getElementById('statMisIngresosMes').textContent = Number(data.resumen.ingresos_mes_actual || 0).toLocaleString('es-CO') + ' COP';
         document.getElementById('statMisIngresos').textContent = Number(data.resumen.ingresos_totales).toLocaleString('es-CO') + ' COP';
 
         dibujarGraficoBarras('graficoMisCitas', data.citas_mes.etiquetas, data.citas_mes.valores, 'Citas');
@@ -1480,7 +1482,7 @@ async function verDetalle(tipo) {
                     <td>${Number(it.total_gastado || 0).toLocaleString('es-CO')} COP</td>
                 </tr>`;
             });
-        } else if (tipo === 'ingresos') {
+        } else if (tipo === 'ingresos' || tipo === 'ingresos_mes') {
             html += '<th>Servicio</th><th>Cantidad</th><th>Total</th>';
             html += '</tr></thead><tbody>';
             let total = 0;
