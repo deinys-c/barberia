@@ -5,6 +5,7 @@ from helpers import ahora_ve, obtener_usuario_actual
 from notificaciones import enviar_telegram
 from disponibilidad import calcular_huecos_libres, obtener_duracion_servicio
 from config import ZONA_HORARIA_VE, DIAS_ES
+from extensions import limiter
 import json
 
 public_bp = Blueprint('public', __name__)
@@ -95,6 +96,7 @@ def disponibilidad():
         return jsonify({'error': str(e)}), 500
 
 @public_bp.route('/api/reservar', methods=['POST'])
+@limiter.limit("20 per minute")
 def reservar():
     data = request.json
     required = ['fecha', 'hora_inicio', 'servicio_id', 'nombre']
@@ -259,6 +261,7 @@ def reservar():
         return jsonify({'error': str(e)}), 500
 
 @public_bp.route('/api/clientes/buscar', methods=['GET'])
+@limiter.limit("60 per minute")
 def buscar_clientes():
     """Busca clientes por nombre o telefono (para autocompletado)."""
     q = request.args.get('q', '').strip()

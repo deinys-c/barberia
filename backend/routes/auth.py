@@ -4,10 +4,12 @@ from datetime import datetime, timedelta, timezone
 import jwt
 from database import get_db
 from config import SECRET_KEY, JWT_EXPIRATION_HOURS
+from extensions import limiter
 
 auth_bp = Blueprint('auth', __name__)
 
 @auth_bp.route('/api/login', methods=['POST'])
+@limiter.limit("10 per minute")
 def login():
     data = request.json
     username = data.get('username', '').strip()
