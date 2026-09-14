@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify
 import json
 from database import get_db
-from helpers import requiere_admin, requiere_autenticacion, ahora_ve
+from helpers import requiere_admin, requiere_autenticacion, ahora_ve, respuesta_error
 from notificaciones import enviar_telegram
 
 admin_bp = Blueprint('admin', __name__)
@@ -35,7 +35,7 @@ def listar_barberos():
         conn.close()
         return jsonify([dict(b) for b in barberos])
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return respuesta_error(e, 'admin')
 
 @admin_bp.route('/api/admin/barberos', methods=['POST'])
 def crear_barbero():
@@ -100,7 +100,7 @@ def crear_barbero():
             'id': nuevo_id, 'username': username, 'password': password
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return respuesta_error(e, 'admin')
 
 @admin_bp.route('/api/admin/barberos/<int:barbero_id>', methods=['PUT'])
 def actualizar_barbero(barbero_id):
@@ -188,7 +188,7 @@ def actualizar_barbero(barbero_id):
             respuesta['password'] = password_gen
         return jsonify(respuesta)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return respuesta_error(e, 'admin')
 
 @admin_bp.route('/api/admin/barberos/<int:barbero_id>', methods=['DELETE'])
 def eliminar_barbero(barbero_id):
@@ -224,7 +224,7 @@ def eliminar_barbero(barbero_id):
             'citas_canceladas': canceladas
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return respuesta_error(e, 'admin')
 
 @admin_bp.route('/api/admin/barberos/<int:barbero_id>/reactivar', methods=['PUT'])
 def reactivar_barbero(barbero_id):
@@ -255,7 +255,7 @@ def reactivar_barbero(barbero_id):
             'mensaje': f'Barbero "{barbero["nombre"]}" reactivado exitosamente'
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return respuesta_error(e, 'admin')
 
 @admin_bp.route('/api/admin/barberos/<int:barbero_id>/permanente', methods=['DELETE'])
 def eliminar_barbero_permanente(barbero_id):
@@ -338,7 +338,7 @@ def eliminar_barbero_permanente(barbero_id):
             enviar_telegram(f"🗑️ <b>Barbero eliminado permanentemente</b>\n{barbero['nombre']}")
             return jsonify({'mensaje': f'Barbero "{barbero["nombre"]}" eliminado permanentemente'})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return respuesta_error(e, 'admin')
             
 
 # ========== SERVICIOS (por barbero) ==========
@@ -370,7 +370,7 @@ def servicios_admin():
         conn.close()
         return jsonify([dict(s) for s in servicios])
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return respuesta_error(e, 'admin')
 
 @admin_bp.route('/api/admin/servicios', methods=['POST'])
 def crear_servicio():
@@ -406,7 +406,7 @@ def crear_servicio():
         conn.close()
         return jsonify({'mensaje': 'Servicio creado', 'id': nuevo_id})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return respuesta_error(e, 'admin')
 
 @admin_bp.route('/api/admin/servicios/<int:servicio_id>', methods=['PUT'])
 def actualizar_servicio(servicio_id):
@@ -457,7 +457,7 @@ def actualizar_servicio(servicio_id):
         conn.close()
         return jsonify({'mensaje': 'Servicio actualizado'})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return respuesta_error(e, 'admin')
 
 @admin_bp.route('/api/admin/servicios/<int:servicio_id>', methods=['DELETE'])
 def eliminar_servicio(servicio_id):
@@ -489,7 +489,7 @@ def eliminar_servicio(servicio_id):
             conn.close()
             return jsonify({'mensaje': 'Servicio eliminado'})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return respuesta_error(e, 'admin')
 
 # ========== CATALOGO ==========
 
@@ -509,7 +509,7 @@ def catalogo_admin():
         conn.close()
         return jsonify([dict(i) for i in items])
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return respuesta_error(e, 'admin')
 
 @admin_bp.route('/api/admin/catalogo', methods=['POST'])
 def crear_item_catalogo():
@@ -537,7 +537,7 @@ def crear_item_catalogo():
         conn.close()
         return jsonify({'mensaje': 'Item creado', 'id': nuevo_id})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return respuesta_error(e, 'admin')
 
 @admin_bp.route('/api/admin/catalogo/<int:item_id>', methods=['PUT'])
 def actualizar_item_catalogo(item_id):
@@ -569,7 +569,7 @@ def actualizar_item_catalogo(item_id):
         conn.close()
         return jsonify({'mensaje': 'Item actualizado'})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return respuesta_error(e, 'admin')
 
 @admin_bp.route('/api/admin/catalogo/<int:item_id>', methods=['DELETE'])
 def eliminar_item_catalogo(item_id):
@@ -587,7 +587,7 @@ def eliminar_item_catalogo(item_id):
         conn.close()
         return jsonify({'mensaje': 'Item eliminado'})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return respuesta_error(e, 'admin')
 
 # ========== BACKUP ==========
 @admin_bp.route('/api/admin/backup', methods=['GET'])
@@ -646,7 +646,7 @@ def backup_db():
             'tablas': {k: len(v) if isinstance(v, list) else 0 for k, v in backup['datos'].items() if not k.endswith('_error')}
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return respuesta_error(e, 'admin')
 
 @admin_bp.route('/api/admin/backup-telegram', methods=['GET'])
 def backup_telegram():
@@ -704,7 +704,7 @@ def backup_telegram():
             'totales': totales
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return respuesta_error(e, 'admin')
     
 @admin_bp.route('/api/admin/estadisticas', methods=['GET'])
 def estadisticas():
@@ -888,7 +888,7 @@ def estadisticas():
             }
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return respuesta_error(e, 'admin')
     
 @admin_bp.route('/api/admin/estadisticas-detalle', methods=['GET'])
 def estadisticas_detalle():
@@ -1009,4 +1009,4 @@ def estadisticas_detalle():
         conn.close()
         return jsonify(resultado)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return respuesta_error(e, 'admin')

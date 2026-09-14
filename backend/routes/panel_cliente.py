@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify
 from datetime import datetime
 from database import get_db
-from helpers import requiere_autenticacion, ahora_ve, actualizar_citas_pasadas
+from helpers import requiere_autenticacion, ahora_ve, actualizar_citas_pasadas, respuesta_error
 from notificaciones import enviar_telegram
 from config import ZONA_HORARIA_VE
 
@@ -39,7 +39,7 @@ def listar_pendientes():
         conn.close()
         return jsonify([dict(c) for c in citas])
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return respuesta_error(e, 'panel')
 
 @panel_bp.route('/api/panel/historial', methods=['GET'])
 def historial_citas():
@@ -96,7 +96,7 @@ def historial_citas():
         conn.close()
         return jsonify([dict(c) for c in citas])
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return respuesta_error(e, 'panel')
 
 @panel_bp.route('/api/panel/confirmar-cita', methods=['POST'])
 def confirmar_cita():
@@ -128,7 +128,7 @@ def confirmar_cita():
         enviar_telegram(f"✅ Cita #{cita_id} confirmada por {user['username']}")
         return jsonify({'mensaje': 'Confirmada'})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return respuesta_error(e, 'panel')
 
 @panel_bp.route('/api/panel/rechazar-cita', methods=['POST'])
 def rechazar_cita():
@@ -171,7 +171,7 @@ def rechazar_cita():
             'accion': 'rechazar'
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return respuesta_error(e, 'panel')
 
 @panel_bp.route('/api/panel/cancelar-cita-confirmada', methods=['POST'])
 def cancelar_cita_confirmada():
@@ -217,7 +217,7 @@ def cancelar_cita_confirmada():
             'accion': 'cancelar'
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return respuesta_error(e, 'panel')
 
 @panel_bp.route('/api/admin/citas/<int:cita_id>', methods=['DELETE'])
 def eliminar_cita_permanente(cita_id):
@@ -237,7 +237,7 @@ def eliminar_cita_permanente(cita_id):
         conn.close()
         return jsonify({'mensaje': 'Cita eliminada permanentemente'})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return respuesta_error(e, 'panel')
 
 @panel_bp.route('/api/panel/bloquear', methods=['POST'])
 def bloquear_dias():
@@ -278,7 +278,7 @@ def bloquear_dias():
         enviar_telegram(f"📅 Bloqueo: {fecha_inicio} → {fecha_fin}\nPor: {user['username']}")
         return jsonify({'mensaje': 'Bloqueo agregado'})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return respuesta_error(e, 'panel')
 
 @panel_bp.route('/api/panel/cancelar-citas-masivo', methods=['POST'])
 def cancelar_masivo():
@@ -311,7 +311,7 @@ def cancelar_masivo():
         enviar_telegram(f"🚫 {afectadas} citas canceladas por {user['username']}")
         return jsonify({'mensaje': f'{afectadas} citas canceladas'})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return respuesta_error(e, 'panel')
 
 # ========== CLIENTE ==========
 
@@ -346,7 +346,7 @@ def mis_citas():
         conn.close()
         return jsonify([dict(c) for c in citas])
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return respuesta_error(e, 'panel')
 
 @panel_bp.route('/api/cancelar-cita', methods=['POST'])
 def cancelar_cita_cliente():
@@ -382,7 +382,7 @@ def cancelar_cita_cliente():
             enviar_telegram(mensaje, chat_id=barbero_telegram)
         return jsonify({'mensaje': 'Cancelada'})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return respuesta_error(e, 'panel')
 
 @panel_bp.route('/api/solicitar-modificacion', methods=['POST'])
 def solicitar_modificacion():
@@ -449,4 +449,4 @@ def solicitar_modificacion():
             enviar_telegram(mensaje, chat_id=barbero_telegram)
         return jsonify({'mensaje': 'Solicitud enviada', 'nueva_cita_id': nueva_cita_id})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return respuesta_error(e, 'panel')

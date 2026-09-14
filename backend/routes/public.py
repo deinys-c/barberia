@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify
 from datetime import datetime, timedelta
 from database import get_db
-from helpers import ahora_ve, obtener_usuario_actual
+from helpers import ahora_ve, obtener_usuario_actual, respuesta_error
 from notificaciones import enviar_telegram
 from disponibilidad import calcular_huecos_libres, obtener_duracion_servicio
 from config import ZONA_HORARIA_VE, DIAS_ES
@@ -24,7 +24,7 @@ def listar_barberos_publico():
         conn.close()
         return jsonify([dict(b) for b in barberos])
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return respuesta_error(e, 'public')
 
 @public_bp.route('/api/servicios', methods=['GET'])
 def listar_servicios_publico():
@@ -64,7 +64,7 @@ def listar_servicios_publico():
         conn.close()
         return jsonify(servicios)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return respuesta_error(e, 'public')
     
 @public_bp.route('/api/catalogo', methods=['GET'])
 def catalogo_publico():
@@ -80,7 +80,7 @@ def catalogo_publico():
         conn.close()
         return jsonify([dict(i) for i in items])
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return respuesta_error(e, 'public')
 
 @public_bp.route('/api/disponibilidad', methods=['GET'])
 def disponibilidad():
@@ -93,7 +93,7 @@ def disponibilidad():
         disponibles = calcular_huecos_libres(fecha, barbero_id, servicio_id)
         return jsonify({'disponibles': disponibles, 'fecha': fecha, 'total': len(disponibles)})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return respuesta_error(e, 'public')
 
 @public_bp.route('/api/reservar', methods=['POST'])
 @limiter.limit("20 per minute")
@@ -258,7 +258,7 @@ def reservar():
         else:
             return jsonify({'mensaje': '¡Cita agendada!', 'citaId': cita_id, 'estado': 'confirmada'})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return respuesta_error(e, 'public')
 
 @public_bp.route('/api/clientes/buscar', methods=['GET'])
 @limiter.limit("60 per minute")
@@ -282,4 +282,4 @@ def buscar_clientes():
         conn.close()
         return jsonify([dict(c) for c in clientes])
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return respuesta_error(e, 'public')

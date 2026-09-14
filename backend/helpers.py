@@ -65,3 +65,10 @@ def actualizar_citas_pasadas():
         conn.close()
     except Exception:
         pass
+
+def respuesta_error(e, contexto):
+    """Registra el error real en logs y devuelve un mensaje genérico al cliente."""
+    import traceback
+    print(f"[ERROR] {contexto}: {type(e).__name__} - {e}")
+    traceback.print_exc()
+    return jsonify({'error': 'Error interno del servidor'}), 500

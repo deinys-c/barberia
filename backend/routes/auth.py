@@ -5,6 +5,7 @@ import jwt
 from database import get_db
 from config import SECRET_KEY, JWT_EXPIRATION_HOURS
 from extensions import limiter
+from helpers import respuesta_error
 
 auth_bp = Blueprint('auth', __name__)
 
@@ -42,4 +43,4 @@ def login():
             'barbero_id': user['barbero_id']
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return respuesta_error(e, 'Login')
