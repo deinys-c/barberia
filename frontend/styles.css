@@ -538,3 +538,80 @@ input.campo-invalido {
 }
 .mensaje-validacion.error { color: #d97a7a; display: block; }
 .mensaje-validacion.exito { color: #7ac99a; display: block; }
+
+/* ===== AVISO DE POLITICA DE CANCELACION ===== */
+.aviso-politica {
+    background: rgba(201, 168, 76, 0.08);
+    border-left: 3px solid #c9a84c;
+    border-radius: 6px;
+    padding: 12px 15px;
+    margin-bottom: 15px;
+    font-size: 0.85rem;
+    color: #d5b87a;
+    line-height: 1.5;
+}
+.aviso-politica i {
+    color: #c9a84c;
+    margin-right: 6px;
+}
+body.modo-claro .aviso-politica {
+    background: rgba(106, 74, 42, 0.08);
+    color: #6a4a2a;
+}
+body.modo-claro .aviso-politica i {
+    color: #6a4a2a;
+}
+
+/* ===== SKELETON LOADER ===== */
+.skeleton {
+    background: linear-gradient(90deg, rgba(255,255,255,0.03) 25%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.03) 75%);
+    background-size: 200% 100%;
+    animation: skeleton-loading 1.5s infinite;
+    border-radius: 6px;
+    height: 20px;
+    margin: 8px 0;
+}
+@keyframes skeleton-loading {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+.skeleton-card {
+    background: rgba(255,255,255,0.03);
+    border-left: 4px solid rgba(201, 168, 76, 0.3);
+    border-radius: 6px;
+    padding: 15px 20px;
+    margin: 10px 0;
+}
+.skeleton-card .skeleton {
+    height: 14px;
+}
+.skeleton-card .skeleton:first-child {
+    height: 18px;
+    width: 60%;
+}
+.skeleton-card .skeleton:nth-child(2) {
+    width: 80%;
+}
+.skeleton-card .skeleton:nth-child(3) {
+    width: 40%;
+}
+body.modo-claro .skeleton {
+    background: linear-gradient(90deg, #f0e8d8 25%, #e0d0b8 50%, #f0e8d8 75%);
+    background-size: 200% 100%;
+}
+body.modo-claro .skeleton-card {
+    background: #faf5ea;
+}
+
+/* ===== BOTON WHATSAPP ===== */
+.btn-whatsapp {
+    background: #25d366;
+    color: #ffffff;
+    border: none;
+}
+.btn-whatsapp:hover {
+    background: #1eb356;
+}
+.btn-whatsapp i {
+    color: #ffffff;
+}

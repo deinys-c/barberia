@@ -32,6 +32,27 @@ function fechaVE(diasAdelante = 0) {
     return ahoraVE.toISOString().split('T')[0];
 }
 
+// ===== SKELETON LOADER =====
+function mostrarSkeleton(contenedor, cantidad = 3) {
+    if (!contenedor) return;
+    contenedor.innerHTML = '';
+    for (let i = 0; i < cantidad; i++) {
+        const div = document.createElement('div');
+        div.className = 'skeleton-card';
+        div.innerHTML = '<div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>';
+        contenedor.appendChild(div);
+    }
+}
+
+// ===== PRECARGA DEL TELEFONO =====
+function guardarTelefonoCliente(tel) {
+    if (!tel) return;
+    try { localStorage.setItem('clienteTelefono', tel); } catch (e) {}
+}
+function cargarTelefonoCliente() {
+    try { return localStorage.getItem('clienteTelefono') || ''; } catch (e) { return ''; }
+}
+
 // ===== ESTADOS DE CARGA EN BOTONES =====
 function activarCargando(boton, textoOriginal = null) {
     if (!boton) return null;
@@ -155,7 +176,6 @@ function cargarSesion() {
             if (u && u.token) {
                 currentUser = u;
             } else {
-                // Sesión vieja sin token → descartar
                 localStorage.removeItem('currentUser');
                 currentUser = null;
             }
@@ -213,7 +233,7 @@ async function loginUsuario() {
         });
         const data = await res.json();
         if (res.ok) {
-             guardarSesion({ username: data.username, rol: data.rol, barbero_id: data.barbero_id, token: data.token });
+            guardarSesion({ username: data.username, rol: data.rol, barbero_id: data.barbero_id, token: data.token });
             document.getElementById('barberoLogin').style.display = 'none';
             document.getElementById('barberoContenido').style.display = 'block';
             document.getElementById('usernameLogin').value = '';
@@ -434,10 +454,10 @@ async function reservar() {
     const telefono = document.getElementById('telefono').value.trim();
     const notas = document.getElementById('notas').value.trim();
 
-    if (!validarNombre()) { mostrarToast('El nombre debe tener al menos 2 caracteres', 'error'); return; }
-    if (!validarTelefono()) { mostrarToast('El teléfono debe tener al menos 7 dígitos', 'error'); return; }
-    if (!horaSeleccionada) { mostrarToast('Selecciona hora', 'error'); return; }
-    if (!servicio) { mostrarToast('Selecciona servicio', 'error'); return; }
+    if (!validarNombre()) { mostrarToast('El nombre debe tener al menos 2 caracteres', 'error'); desactivarCargando(btnReservar); return; }
+    if (!validarTelefono()) { mostrarToast('El teléfono debe tener al menos 7 dígitos', 'error'); desactivarCargando(btnReservar); return; }
+    if (!horaSeleccionada) { mostrarToast('Selecciona hora', 'error'); desactivarCargando(btnReservar); return; }
+    if (!servicio) { mostrarToast('Selecciona servicio', 'error'); desactivarCargando(btnReservar); return; }
 
     reservandoEnProceso = true;
     const msg = document.getElementById('mensajeReserva');
@@ -460,6 +480,17 @@ async function reservar() {
         msg.textContent = data.mensaje || data.error || 'Error';
         if (!res.ok) logError('Reservar (servidor)', { status: res.status, data });
         if (res.ok) {
+            // Guardar el teléfono para futuras consultas
+            if (telefono) guardarTelefonoCliente(telefono);
+
+            // Mostrar modal de confirmación visual
+            mostrarModalReservaExitosa({
+                fecha: fecha,
+                hora: horaSeleccionada,
+                nombre: nombre,
+                telefono: telefono
+            });
+
             document.getElementById('formReserva').style.display = 'none';
             document.getElementById('huecos').innerHTML = '';
             document.getElementById('nombre').value = '';
@@ -484,7 +515,7 @@ async function consultarCitas() {
     const tel = document.getElementById('telefonoConsulta').value.trim();
     if (!tel) { mostrarToast('Ingresa teléfono', 'error'); return; }
     const c = document.getElementById('misCitas');
-    c.innerHTML = '<div class="sin-huecos">Buscando...</div>';
+    mostrarSkeleton(c, 2);
     try {
         const res = await fetch(`${API_URL}/api/mis-citas?telefono=${encodeURIComponent(tel)}`);
         const citas = await res.json();
@@ -521,9 +552,11 @@ async function consultarCitas() {
 
             let botones = '';
             if (ct.estado === 'confirmada' || ct.estado === 'pendiente_confirmacion') {
+                const telBarbero = ct.barbero_telefono || '';
                 botones = `
                     <button class="btn-cancelar" onclick="cancelarCita(${ct.id})"><i class="fa-solid fa-xmark"></i> Cancelar</button>
                     <button class="btn-modificar" onclick="solicitarModificacion(${ct.id})"><i class="fa-solid fa-pen"></i> Modificar</button>
+                    ${telBarbero ? `<button class="btn-whatsapp" onclick="avisarPorWhatsApp('${escaparHTML(ct.barbero || '')}', '${escaparHTML(telBarbero)}', '${escaparHTML(ct.fecha)}', '${escaparHTML(ct.hora_inicio)}', 'consulta')"><i class="fa-brands fa-whatsapp"></i> Contactar</button>` : ''}
                 `;
             }
 
@@ -578,7 +611,7 @@ async function cargarPendientes() {
     const c = document.getElementById('pendientesLista');
     if (!c) return;
     const bid = document.getElementById('filtroBarberoPendientes')?.value || 0;
-    c.innerHTML = '<div class="sin-huecos">Cargando...</div>';
+    mostrarSkeleton(c, 3);
     try {
         const res = await fetch(`${API_URL}/api/panel/pendientes?barbero_id=${bid}`, { headers: getAuthHeaders() });
         if (res.status === 401) {
@@ -673,7 +706,7 @@ async function cargarHistorial() {
     if (estado) url += `&estado=${encodeURIComponent(estado)}`;
     if (busqueda) url += `&busqueda=${encodeURIComponent(busqueda)}`;
 
-    c.innerHTML = '<div class="sin-huecos">Cargando...</div>';
+    mostrarSkeleton(c, 4);
     try {
         const res = await fetch(url, { headers: getAuthHeaders() });
         if (res.status === 401) {
@@ -782,9 +815,9 @@ async function guardarBarbero() {
 
     const id = document.getElementById('barberoEditId').value;
     const nombre = document.getElementById('barberoNombre').value.trim();
-    if (!nombre) { mostrarToast('El nombre es obligatorio', 'error'); return; }
+    if (!nombre) { mostrarToast('El nombre es obligatorio', 'error'); desactivarCargando(btnGuardar); return; }
     const dias = Array.from(document.querySelectorAll('.dia-check:checked')).map(c => c.value);
-    if (!dias.length) { mostrarToast('Selecciona días', 'error'); return; }
+    if (!dias.length) { mostrarToast('Selecciona días', 'error'); desactivarCargando(btnGuardar); return; }
 
     const conPausa = document.getElementById('barberoConPausa').value === 'si';
     const body = {
@@ -823,7 +856,7 @@ async function guardarBarbero() {
 async function cargarBarberos() {
     const c = document.getElementById('listaBarberos');
     if (!c) return;
-    c.innerHTML = '<div class="sin-huecos">Cargando...</div>';
+    mostrarSkeleton(c, 3);
     try {
         const res = await fetch(`${API_URL}/api/admin/barberos`, { headers: getAuthHeaders() });
         if (res.status === 401) { c.innerHTML = '<div class="sin-huecos">Sesión expirada.</div>'; return; }
@@ -1013,7 +1046,7 @@ async function cargarServiciosAdmin() {
     const selBarbero = document.getElementById('serviciosBarberoSelect');
     const barberoId = selBarbero?.value || currentUser?.barbero_id;
     if (!barberoId) { c.innerHTML = '<div class="sin-huecos">Selecciona un barbero.</div>'; return; }
-    c.innerHTML = '<div class="sin-huecos">Cargando...</div>';
+    mostrarSkeleton(c, 3);
     try {
         const res = await fetch(`${API_URL}/api/admin/servicios?barbero_id=${barberoId}`, { headers: getAuthHeaders() });
         if (res.status === 401) { c.innerHTML = '<div class="sin-huecos">Sesión expirada.</div>'; return; }
@@ -1064,9 +1097,9 @@ async function guardarServicio() {
     const nombre = document.getElementById('servicioNombre').value.trim();
     const duracion = parseInt(document.getElementById('servicioDuracion').value);
     const precio = parseFloat(document.getElementById('servicioPrecio').value);
-    if (!nombre) { mostrarToast('El nombre es obligatorio', 'error'); return; }
-    if (!duracion || duracion <= 0) { mostrarToast('Duración inválida', 'error'); return; }
-    if (isNaN(precio) || precio < 0) { mostrarToast('Precio inválido', 'error'); return; }
+    if (!nombre) { mostrarToast('El nombre es obligatorio', 'error'); desactivarCargando(btnGuardar); return; }
+    if (!duracion || duracion <= 0) { mostrarToast('Duración inválida', 'error'); desactivarCargando(btnGuardar); return; }
+    if (isNaN(precio) || precio < 0) { mostrarToast('Precio inválido', 'error'); desactivarCargando(btnGuardar); return; }
     const selBarbero = document.getElementById('serviciosBarberoSelect');
     const barberoId = selBarbero?.value || currentUser?.barbero_id;
     const body = {
@@ -1140,7 +1173,7 @@ async function eliminarServicio(id) {
 async function cargarCatalogoAdmin() {
     const c = document.getElementById('listaCatalogo');
     if (!c) return;
-    c.innerHTML = '<div class="sin-huecos">Cargando...</div>';
+    mostrarSkeleton(c, 4);
     try {
         const res = await fetch(`${API_URL}/api/admin/catalogo`, { headers: getAuthHeaders() });
         if (res.status === 401) { c.innerHTML = '<div class="sin-huecos">Sesión expirada.</div>'; return; }
@@ -1201,7 +1234,7 @@ async function guardarItem() {
         descripcion: document.getElementById('itemDescripcion').value.trim(),
         orden: parseInt(document.getElementById('itemOrden').value) || 0
     };
-    if (!body.archivo || !body.nombre) { mostrarToast('Archivo y nombre obligatorios', 'error'); return; }
+    if (!body.archivo || !body.nombre) { mostrarToast('Archivo y nombre obligatorios', 'error'); desactivarCargando(btnGuardar); return; }
     const url = id ? `${API_URL}/api/admin/catalogo/${id}` : `${API_URL}/api/admin/catalogo`;
     const method = id ? 'PUT' : 'POST';
     try {
@@ -1269,8 +1302,8 @@ async function bloquearDias() {
     const fin = document.getElementById('bloqueoFin').value;
     const mot = document.getElementById('bloqueoMotivo').value.trim() || 'Descanso';
     const bid = parseInt(document.getElementById('bloqueoBarbero')?.value) || 1;
-    if (!ini || !fin) { mostrarToast('Fechas requeridas', 'error'); return; }
-    if (fin < ini) { mostrarToast('Fecha fin inválida', 'error'); return; }
+    if (!ini || !fin) { mostrarToast('Fechas requeridas', 'error'); desactivarCargando(btnBloquear); return; }
+    if (fin < ini) { mostrarToast('Fecha fin inválida', 'error'); desactivarCargando(btnBloquear); return; }
     const msg = document.getElementById('mensajeBloqueo');
     msg.className = 'mensaje info';
     msg.textContent = 'Procesando...';
@@ -1580,6 +1613,55 @@ function mostrarToast(mensaje, tipo = 'info', duracion = 3500) {
     }, duracion);
 }
 
+// ===== MODAL DE RESERVA EXITOSA =====
+function formatearFechaHumana(fechaISO) {
+    if (!fechaISO) return '';
+    try {
+        const [y, m, d] = fechaISO.split('-');
+        const meses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+        const dias = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+        const fecha = new Date(parseInt(y), parseInt(m) - 1, parseInt(d));
+        return `${dias[fecha.getDay()]} ${parseInt(d)} ${meses[parseInt(m) - 1]}`;
+    } catch (e) {
+        return fechaISO;
+    }
+}
+
+function mostrarModalReservaExitosa(datos) {
+    const cont = document.getElementById('reserva-exitosa-contenido');
+    if (!cont) return;
+    const fechaHumana = formatearFechaHumana(datos.fecha);
+    cont.innerHTML = `
+        <div style="background: rgba(201,168,76,0.08); padding:15px; border-radius:8px; margin-bottom:10px;">
+            <div style="font-size:1.1rem; color:#f0d5a8; margin-bottom:8px;">
+                <i class="fa-solid fa-calendar"></i> ${escaparHTML(fechaHumana)} a las ${escaparHTML(datos.hora)}
+            </div>
+            <div style="color:#8a7a6a; font-size:0.9rem;">
+                Te esperamos, ${escaparHTML(datos.nombre)}.
+            </div>
+        </div>
+        <div style="font-size:0.85rem; color:#8a7a6a;">
+            📱 Te contactaremos por WhatsApp si es necesario.
+        </div>
+    `;
+    document.getElementById('modal-reserva-exitosa').classList.add('activo');
+}
+
+function cerrarModalReservaExitosa() {
+    document.getElementById('modal-reserva-exitosa').classList.remove('activo');
+}
+
+function irAMisCitas() {
+    cerrarModalReservaExitosa();
+    cambiarTabCliente('mis-citas');
+    const telInput = document.getElementById('telefonoConsulta');
+    const telGuardado = cargarTelefonoCliente();
+    if (telInput && telGuardado) {
+        telInput.value = telGuardado;
+        setTimeout(() => consultarCitas(), 200);
+    }
+}
+
 // ===== MODAL =====
 let modalResolve = null;
 function mostrarConfirmacion(mensaje, titulo = 'Confirmar') {
@@ -1634,6 +1716,8 @@ function avisarPorWhatsApp(nombre, telefono, fecha, hora, accion) {
         mensaje = `Hola ${nombre}, tu solicitud de cita para el ${fecha} a las ${hora} NO pudo ser aceptada. Por favor, contáctanos para agendar en otro horario. - Gocho Barber`;
     } else if (accion === 'cancelada') {
         mensaje = `Hola ${nombre}, tu cita del ${fecha} a las ${hora} ha sido cancelada. Disculpa las molestias. Por favor, contáctanos para reagendar. - Gocho Barber`;
+    } else if (accion === 'consulta') {
+        mensaje = `Hola, te escribo de Gocho Barber por mi cita del ${fecha} a las ${hora}.`;
     } else {
         mensaje = `Hola ${nombre}, te escribimos de Gocho Barber por tu cita del ${fecha} a las ${hora}.`;
     }
@@ -1714,7 +1798,6 @@ async function verificarEInstalar() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ username: 'admin', password })
         });
-        // No guardamos el token aquí: es solo para verificar la contraseña
 
         if (!res.ok) {
             msg.className = 'mensaje error';
@@ -1896,7 +1979,7 @@ function validarTelefono() {
 // ===== ATAJOS DE TECLADO =====
 document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
-        const modales = ['modal-overlay', 'modal-detalle', 'modal-instalar', 'modal-instrucciones-iphone'];
+        const modales = ['modal-overlay', 'modal-detalle', 'modal-instalar', 'modal-instrucciones-iphone', 'modal-reserva-exitosa'];
         modales.forEach(id => {
             const m = document.getElementById(id);
             if (m && m.classList.contains('activo')) {
@@ -1940,6 +2023,13 @@ document.addEventListener('keydown', (e) => {
     if (mIphone && mIphone.classList.contains('activo')) {
         e.preventDefault();
         cerrarModalInstrucciones();
+        return;
+    }
+
+    const mReservaExitosa = document.getElementById('modal-reserva-exitosa');
+    if (mReservaExitosa && mReservaExitosa.classList.contains('activo')) {
+        e.preventDefault();
+        cerrarModalReservaExitosa();
         return;
     }
 
@@ -1995,6 +2085,12 @@ document.addEventListener('DOMContentLoaded', function() {
     cargarModo();
     cargarSesion();
     actualizarUISegunRol();
+
+    // Precargar teléfono del cliente en Mis Citas
+    const telConsulta = document.getElementById('telefonoConsulta');
+    const telGuardado = cargarTelefonoCliente();
+    if (telConsulta && telGuardado) telConsulta.value = telGuardado;
+
     try {
         const fechaManana = fechaVE(1);
         const fechaHoy = fechaVE(0);
@@ -2060,3 +2156,7 @@ window.cargarMisEstadisticas = cargarMisEstadisticas;
 window.avisarPorWhatsApp = avisarPorWhatsApp;
 window.activarCargando = activarCargando;
 window.desactivarCargando = desactivarCargando;
+window.mostrarSkeleton = mostrarSkeleton;
+window.mostrarModalReservaExitosa = mostrarModalReservaExitosa;
+window.cerrarModalReservaExitosa = cerrarModalReservaExitosa;
+window.irAMisCitas = irAMisCitas;

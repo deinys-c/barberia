@@ -338,7 +338,7 @@ def mis_citas():
         hace_7_dias = (ahora_ve() - __import__('datetime').timedelta(days=7)).strftime('%Y-%m-%d')
         cursor.execute('''
             SELECT c.id, c.fecha, c.hora_inicio, c.hora_fin, c.estado, s.nombre as servicio,
-                   b.nombre as barbero, c.alerta_cierre
+                   b.nombre as barbero, b.telefono as barbero_telefono, c.alerta_cierre
             FROM citas c
             JOIN clientes cl ON c.cliente_id = cl.id
             JOIN servicios s ON c.servicio_id = s.id

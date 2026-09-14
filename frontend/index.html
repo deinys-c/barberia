@@ -70,6 +70,9 @@
             <div id="huecosContainer" style="margin-top:15px;"><div id="huecos" class="huecos-grid"></div></div>
 
             <div id="formReserva" style="display:none; margin-top:20px; border-top: 1px solid rgba(201,168,76,0.15); padding-top:20px;">
+                <div class="aviso-politica">
+                    <i class="fa-solid fa-circle-info"></i> Puedes cancelar tu cita sin costo hasta 1 hora antes. Si necesitas cambiarla, usa el botón "Modificar" en "Mis Citas".
+                </div>
                 <div class="row">
                     <div style="position:relative;">
                         <label>Nombre completo *</label>
@@ -443,6 +446,20 @@
         <div class="modal-botones">
             <button class="btn btn-secundario" onclick="cerrarModal(false)">Cancelar</button>
             <button class="btn" onclick="cerrarModal(true)">Aceptar</button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de confirmación de reserva exitosa -->
+<div id="modal-reserva-exitosa" class="modal-overlay">
+    <div class="modal-box">
+        <h3><i class="fa-solid fa-circle-check" style="color:#7ac99a;"></i> ¡Reserva confirmada!</h3>
+        <div id="reserva-exitosa-contenido" style="color:#f0d5a8; line-height:1.8; margin:15px 0;">
+            <!-- Se llena dinámicamente -->
+        </div>
+        <div class="modal-botones">
+            <button class="btn btn-secundario" onclick="cerrarModalReservaExitosa()">Cerrar</button>
+            <button class="btn" onclick="irAMisCitas()"><i class="fa-solid fa-calendar-check"></i> Ver mis citas</button>
         </div>
     </div>
 </div>
