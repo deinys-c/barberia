@@ -32,6 +32,24 @@ function fechaVE(diasAdelante = 0) {
     return ahoraVE.toISOString().split('T')[0];
 }
 
+// ===== ESTADOS DE CARGA EN BOTONES =====
+function activarCargando(boton, textoOriginal = null) {
+    if (!boton) return null;
+    const textoBackup = textoOriginal || boton.innerHTML;
+    boton.disabled = true;
+    boton.dataset.textoOriginal = textoBackup;
+    boton.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Procesando...';
+    return textoBackup;
+}
+
+function desactivarCargando(boton, textoOriginal = null) {
+    if (!boton) return;
+    const backup = textoOriginal || boton.dataset.textoOriginal || boton.innerHTML;
+    boton.disabled = false;
+    boton.innerHTML = backup;
+    delete boton.dataset.textoOriginal;
+}
+
 // ===== MANEJO CENTRALIZADO DE ERRORES =====
 function logError(contexto, detalle) {
     console.error(`[${contexto}]`, detalle);
@@ -406,6 +424,9 @@ let reservandoEnProceso = false;
 async function reservar() {
     if (reservandoEnProceso) return;
 
+    const btnReservar = document.querySelector('#formReserva button.btn');
+    activarCargando(btnReservar);
+
     const fecha = document.getElementById('fecha').value;
     const servicio = document.getElementById('servicio').value;
     const barberoId = parseInt(document.getElementById('barbero').value) || 0;
@@ -454,6 +475,7 @@ async function reservar() {
         msg.textContent = 'Error al conectar. Revisa la consola (F12) para más detalle.';
     } finally {
         reservandoEnProceso = false;
+        desactivarCargando(btnReservar);
     }
 }
 
@@ -755,6 +777,9 @@ function abrirFormBarbero() {
 function cerrarFormBarbero() { document.getElementById('formBarbero').style.display = 'none'; }
 
 async function guardarBarbero() {
+    const btnGuardar = document.querySelector('#formBarbero button.btn');
+    activarCargando(btnGuardar);
+
     const id = document.getElementById('barberoEditId').value;
     const nombre = document.getElementById('barberoNombre').value.trim();
     if (!nombre) { mostrarToast('El nombre es obligatorio', 'error'); return; }
@@ -788,7 +813,11 @@ async function guardarBarbero() {
                 cargarBarberosCliente();
             }, 1500);
         }
-    } catch (e) { manejarErrorCatch(e, 'Guardar barbero'); }
+    } catch (e) {
+        manejarErrorCatch(e, 'Guardar barbero');
+    } finally {
+        desactivarCargando(btnGuardar);
+    }
 }
 
 async function cargarBarberos() {
@@ -1028,6 +1057,9 @@ function abrirFormServicio() {
 function cerrarFormServicio() { document.getElementById('formServicio').style.display = 'none'; }
 
 async function guardarServicio() {
+    const btnGuardar = document.querySelector('#formServicio button.btn');
+    activarCargando(btnGuardar);
+
     const id = document.getElementById('servicioEditId').value;
     const nombre = document.getElementById('servicioNombre').value.trim();
     const duracion = parseInt(document.getElementById('servicioDuracion').value);
@@ -1057,7 +1089,11 @@ async function guardarServicio() {
         if (res.ok) {
             setTimeout(() => { cerrarFormServicio(); cargarServiciosAdmin(); }, 1000);
         }
-    } catch (e) { manejarErrorCatch(e, 'Guardar servicio'); }
+    } catch (e) {
+        manejarErrorCatch(e, 'Guardar servicio');
+    } finally {
+        desactivarCargando(btnGuardar);
+    }
 }
 
 async function editarServicio(id) {
@@ -1153,6 +1189,9 @@ function abrirFormItem() {
 function cerrarFormItem() { document.getElementById('formItem').style.display = 'none'; }
 
 async function guardarItem() {
+    const btnGuardar = document.querySelector('#formItem button.btn');
+    activarCargando(btnGuardar);
+
     const id = document.getElementById('itemEditId').value;
     const body = {
         tipo: document.getElementById('itemTipo').value,
@@ -1174,7 +1213,11 @@ async function guardarItem() {
         msg.style.display = 'block';
         if (!res.ok) logError('Guardar item (servidor)', { status: res.status, d });
         if (res.ok) setTimeout(() => { cerrarFormItem(); cargarCatalogoAdmin(); }, 1000);
-    } catch (e) { manejarErrorCatch(e, 'Guardar item'); }
+    } catch (e) {
+        manejarErrorCatch(e, 'Guardar item');
+    } finally {
+        desactivarCargando(btnGuardar);
+    }
 }
 
 async function editarItem(id) {
@@ -1219,6 +1262,9 @@ async function eliminarItem(id) {
 
 // ===== BLOQUEAR DIAS =====
 async function bloquearDias() {
+    const btnBloquear = document.querySelector('#tabConfiguracion button.btn');
+    activarCargando(btnBloquear);
+
     const ini = document.getElementById('bloqueoInicio').value;
     const fin = document.getElementById('bloqueoFin').value;
     const mot = document.getElementById('bloqueoMotivo').value.trim() || 'Descanso';
@@ -1258,6 +1304,8 @@ async function bloquearDias() {
         manejarErrorCatch(e, 'Bloquear días');
         msg.className = 'mensaje error';
         msg.textContent = 'Error al conectar. Revisa la consola (F12) para más detalle.';
+    } finally {
+        desactivarCargando(btnBloquear);
     }
 }
 
@@ -2010,3 +2058,5 @@ window.verDetalle = verDetalle;
 window.cerrarModalDetalle = cerrarModalDetalle;
 window.cargarMisEstadisticas = cargarMisEstadisticas;
 window.avisarPorWhatsApp = avisarPorWhatsApp;
+window.activarCargando = activarCargando;
+window.desactivarCargando = desactivarCargando;
