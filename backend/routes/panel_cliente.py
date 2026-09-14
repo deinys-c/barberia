@@ -292,7 +292,19 @@ def cancelar_masivo():
         conn = get_db()
         cursor = conn.cursor()
         placeholders = ','.join(['%s'] * len(ids))
-        cursor.execute(f"UPDATE citas SET estado = 'cancelada_por_barbero' WHERE id IN ({placeholders})", ids)
+        if user['rol'] == 'barbero' and user['barbero_id']:
+            # Barbero: solo puede cancelar SUS citas
+            cursor.execute(
+                f"UPDATE citas SET estado = 'cancelada_por_barbero' "
+                f"WHERE id IN ({placeholders}) AND barbero_id = %s",
+                ids + [user['barbero_id']]
+            )
+        else:
+            # Admin: puede cancelar cualquiera
+            cursor.execute(
+                f"UPDATE citas SET estado = 'cancelada_por_barbero' WHERE id IN ({placeholders})",
+                ids
+            )
         afectadas = cursor.rowcount
         conn.commit()
         conn.close()

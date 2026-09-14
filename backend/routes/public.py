@@ -120,6 +120,12 @@ def reservar():
 
         if not nombre:
             return jsonify({'error': 'El nombre es obligatorio'}), 400
+        if len(nombre) > 50:
+            return jsonify({'error': 'Nombre demasiado largo (máximo 50 caracteres)'}), 400
+        if len(telefono) > 20:
+            return jsonify({'error': 'Teléfono demasiado largo (máximo 20 caracteres)'}), 400
+        if len(notas) > 500:
+            return jsonify({'error': 'Notas demasiado largas (máximo 500 caracteres)'}), 400
 
         conn = get_db()
         cursor = conn.cursor()

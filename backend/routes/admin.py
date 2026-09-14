@@ -10,18 +10,27 @@ admin_bp = Blueprint('admin', __name__)
 
 @admin_bp.route('/api/admin/barberos', methods=['GET'])
 def listar_barberos():
-    """Lista todos los barberos (activos e inactivos)."""
+    """Lista todos los barberos (activos e inactivos). Los barberos solo ven datos básicos."""
     user, error, code = requiere_autenticacion()
     if error: return error, code
+    es_admin = user['rol'] == 'admin'
     try:
         conn = get_db()
         cursor = conn.cursor()
-        cursor.execute('''
-            SELECT id, nombre, telefono, email, telegram_chat_id, hora_inicio, hora_fin, 
-                   pausa_inicio, pausa_fin, dias_trabajo, activo 
-            FROM barberos 
-            ORDER BY activo DESC, nombre
-        ''')
+        if es_admin:
+            cursor.execute('''
+                SELECT id, nombre, telefono, email, telegram_chat_id, hora_inicio, hora_fin, 
+                       pausa_inicio, pausa_fin, dias_trabajo, activo 
+                FROM barberos 
+                ORDER BY activo DESC, nombre
+            ''')
+        else:
+            # Barbero: solo datos básicos, sin contacto ni telegram
+            cursor.execute('''
+                SELECT id, nombre, hora_inicio, hora_fin, dias_trabajo, activo 
+                FROM barberos 
+                ORDER BY activo DESC, nombre
+            ''')
         barberos = cursor.fetchall()
         conn.close()
         return jsonify([dict(b) for b in barberos])
